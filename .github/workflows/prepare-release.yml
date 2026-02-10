@@ -1,0 +1,111 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type (auto, major, minor, patch)'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - major
+          - minor
+          - patch
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if branch is not main
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        run: |
+          echo "This workflow should not be triggered with workflow_dispatch on a branch other than main"
+          exit 1
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          # Use PAT to trigger publish-release workflow. GITHUB_TOKEN won't trigger workflows.
+          # Create a PAT with 'repo' scope and add as PAT_TOKEN secret to trigger workflows.
+          # Falls back to GITHUB_TOKEN if PAT_TOKEN is not set (won't trigger workflows).
+          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install git-cliff and cargo-edit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff,cargo-edit
+
+      - name: Calculate next version
+        id: version
+        run: |
+          BUMP_TYPE="${{ github.event.inputs.bump_type }}"
+          BUMP_ARG="${BUMP_TYPE:-auto}"
+
+          if [ "$BUMP_ARG" = "auto" ]; then
+            VERSION=$(git cliff --bump --bumped-version)
+          else
+            VERSION=$(git cliff --bump $BUMP_ARG --bumped-version)
+          fi
+
+          [[ "$VERSION" =~ ^v ]] || VERSION="v$VERSION"
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Calculated version: $VERSION"
+
+      - name: Update all Cargo.toml versions
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION_NO_V="${VERSION#v}"
+          cargo set-version --workspace $VERSION_NO_V
+          echo "Updated all workspace crates to version $VERSION_NO_V"
+
+      - name: Update CHANGELOG.md
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --tag ${{ steps.version.outputs.version }}
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Update per-crate changelogs
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          WORKSPACE_ROOT=$(cargo metadata --format-version=1 --no-deps | jq -r '.workspace_root')
+
+          echo "Generating per-crate changelogs..."
+          cargo metadata --format-version=1 --no-deps | jq -r --arg root "$WORKSPACE_ROOT" \
+            '.packages[] | select(.manifest_path != ($root + "/Cargo.toml")) | "\(.name)|\(.manifest_path | sub($root + "/"; "") | sub("/Cargo.toml$"; ""))"' |
+            while IFS='|' read -r crate_name crate_path; do
+              echo "📦 Generating changelog for: $crate_name"
+              git cliff \
+                --include-path "${crate_path}/**" \
+                --output "${crate_path}/CHANGELOG.md" \
+                --tag "$VERSION"
+              echo "✅ Created: ${crate_path}/CHANGELOG.md"
+            done
+
+      - name: Commit version and changelog changes
+        run: |
+          git add Cargo.toml Cargo.lock crates/*/Cargo.toml CHANGELOG.md crates/*/CHANGELOG.md
+          git commit -m "chore(release): bump version to ${{ steps.version.outputs.version }}"
+          echo "Committed version and changelog changes"
+
+      - name: Create and push tag
+        run: |
+          git tag -a ${{ steps.version.outputs.version }} -m "${{ steps.version.outputs.version }}"
+          git push origin main --tags
+          echo "Created and pushed tag ${{ steps.version.outputs.version }}"

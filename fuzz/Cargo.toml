@@ -1,0 +1,19 @@
+[package]
+name = "pgsense-rs-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[dependencies]
+afl = "0.15"
+
+[dependencies.pgsense-rs]
+path = ".."
+
+[[bin]]
+name = "credit_cards"
+path = "targets/credit_cards.rs"
+
+[[bin]]
+name = "ssns"
+path = "targets/ssns.rs"

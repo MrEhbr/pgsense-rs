@@ -1,0 +1,91 @@
+# pgsense-rs configuration
+#
+# All settings support environment variable overrides with the APP__ prefix.
+# Nesting uses double underscores: APP__POSTGRES__HOST=myhost
+#
+# Full documentation: https://github.com/MrEhbr/pgsense-rs
+
+# --- Logging ---
+
+[log]
+format = "console"       # "console" or "json"
+output = "stderr"        # "stderr" or "stdout"
+
+# --- PostgreSQL connection (source database to monitor) ---
+
+[postgres]
+host = "localhost"
+port = 5432
+dbname = "postgres"
+username = "postgres"
+password = "postgres"
+publication = "pgsense_pub"  # must exist: CREATE PUBLICATION pgsense_pub FOR ALL TABLES;
+
+[postgres.tls]
+enabled = false
+# trusted_root_certs = "/path/to/ca.pem"
+
+# --- Pipeline (replication stream processing) ---
+
+[pipeline]
+batch_max_size = 1000            # max events per batch
+batch_max_fill_ms = 5000         # max wait before flushing a partial batch
+table_error_retry_delay_ms = 10000
+table_error_retry_max_attempts = 5
+max_table_sync_workers = 4
+
+# Store backend for LSN checkpointing — pick ONE:
+#
+# Memory (default) — state lost on restart:
+# store = "memory"
+#
+# PostgreSQL — separate connection, isolated schema:
+# [pipeline.store.postgres]
+# host = "localhost"
+# port = 5432
+# dbname = "pgsense_state"
+# username = "postgres"
+# password = "postgres"
+# schema = "pgsense"
+#
+# SQLite — persistent local file:
+[pipeline.store.sqlite]
+path = "./data/pgsense-state.db"
+
+# Detection rules file. Also settable via CLI: --rules <FILE>
+# rules_file = "config/rules.toml"
+
+# --- Scan filters ---
+
+[scan]
+# include_schemas = ["public"]       # only scan these schemas (default: all)
+# exclude_tables = ["audit_log"]     # skip these tables
+# exclude_columns = ["id", "created_at"]  # skip these columns globally
+
+# --- Alert channels ---
+
+[alerts]
+dedup_window_seconds = 300  # suppress duplicate (schema, table, column, rule, value) findings within this window
+
+[alerts.log]
+enabled = true       # structured log output (tracing)
+
+[alerts.stdout]
+enabled = false      # plain-text stdout
+
+[alerts.jsonl]
+enabled = true
+path = "./data/alerts.jsonl"   # append-only JSONL file
+
+# Webhook (repeatable — add multiple [[alerts.webhooks]] blocks):
+# [[alerts.webhooks]]
+# url = "https://hooks.example.com/alert"
+# timeout_ms = 5000
+# [alerts.webhooks.headers]
+# Authorization = "Bearer token123"
+
+# --- HTTP server (health checks + Prometheus metrics) ---
+
+[server]
+enabled = false   # set true to expose /health, /ready, /metrics
+port = 9090

@@ -1,0 +1,27 @@
+# Clippy configuration for strict linting
+# See: https://doc.rust-lang.org/clippy/
+
+# Cognitive complexity threshold
+cognitive-complexity-threshold = 30
+
+# Documentation
+# missing-docs-in-crate-items = true
+
+# Disallowed methods (add methods you want to ban)
+# disallowed-methods = [
+#     { path = "std::env::set_var", reason = "Use config management instead" },
+# ]
+
+# Disallowed types
+# disallowed-types = []
+
+# Maximum function length
+too-many-arguments-threshold = 7
+type-complexity-threshold = 250
+too-many-lines-threshold = 100
+
+# Allow these specific lints globally
+# (Most projects want to set these via #![allow(...)] in lib.rs/main.rs instead)
+
+# Verbosity thresholds
+verbose-bit-mask-threshold = 1

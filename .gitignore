@@ -1,0 +1,100 @@
+# Binaries and build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Build & cache directories
+bin/
+.bin/
+build/
+target/
+tmp/
+
+# Cargo lock policy
+# Uncomment for library projects:
+# Cargo.lock
+# For binary projects: keep Cargo.lock committed
+
+# Temporary files
+*~
+*#
+.#*
+.DS_Store
+*.rs.bk
+*.orig
+
+# Test coverage
+coverage.out
+coverage.txt
+*.coverprofile
+profile.json
+tarpaulin-report.html
+tarpaulin-report.json
+lcov.info
+*.profraw
+*.profdata
+
+# Profiling
+flamegraph.svg
+perf.data
+perf.data.old
+
+# Log files
+*.log
+
+# Environment/config
+.env
+.env.*
+.direnv/
+
+# Security - keys & secrets
+*.pem
+*.key
+*.crt
+secrets.*
+credentials.json
+
+# Vendors
+package-lock.json
+node_modules/
+vendor/
+
+# Editor/IDE settings
+.vscode/
+.idea/
+.history/
+
+# OS-specific
+Thumbs.db
+
+# Cache dirs
+.cache/
+runs
+**/static/
+
+# WebAssembly
+pkg/
+
+# Added by goreleaser init:
+.intentionally-empty-file.o
+
+# Release artifacts
+RELEASE_NOTES.md
+dist/
+
+# Fuzz testing
+fuzz/target/
+fuzz/output/
+
+# AI assistants & tools
+.cursor/
+.copilot/
+.claude/
+.serena/
+
+# Runtime data
+data/

@@ -1,0 +1,68 @@
+# Pre-commit hooks configuration for prek
+# Prek is a Rust-based implementation that provides fast native hooks
+# Install: cargo install --locked prek
+# Setup: prek install
+# See: https://github.com/j178/prek
+
+repos:
+  # ============================================================================
+  # General File Checks
+  # Prek intercepts these hooks and runs fast Rust implementations
+  # ============================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-toml
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1000"]
+      - id: mixed-line-ending
+
+  # ============================================================================
+  # Rust Tooling
+  # ============================================================================
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo
+        args: ["fmt", "--all", "--", "--check"]
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo
+        args: ["clippy", "--workspace", "--all-targets", "--all-features", "--no-deps", "--", "-D", "warnings"]
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-test
+        name: cargo test
+        entry: cargo
+        args: ["nextest", "run", "--workspace"]
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-deny
+        name: cargo deny
+        entry: cargo
+        args: ["deny", "check"]
+        language: system
+        files: Cargo\.(toml|lock)$
+        pass_filenames: false
+        stages: [manual]
+
+      - id: cargo-shear
+        name: cargo shear
+        entry: cargo
+        args: ["shear"]
+        language: system
+        files: Cargo\.(toml|lock)$
+        pass_filenames: false

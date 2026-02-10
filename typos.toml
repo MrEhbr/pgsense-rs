@@ -1,0 +1,5 @@
+# typos configuration
+# See: https://github.com/crate-ci/typos
+
+[default.extend-words]
+ue = "ue"

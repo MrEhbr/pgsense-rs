@@ -1,0 +1,78 @@
+# pgsense-rs detection rules
+#
+# Rule types:
+#   - regex (default): pattern-based matching with optional validator
+#   - builtin: algorithmic detection (credit_card, ssn)
+#   - script: Rhai script with `fn detect(value)` returning array of strings
+#
+# Common fields (all rule types):
+#   id          — unique identifier (required)
+#   description — human-readable description (required)
+#   category    — grouping label: PII, PCI_DSS, CUSTOM, etc. (required)
+#   severity    — low | medium | high | critical (required)
+#
+# Regex-specific fields:
+#   pattern     — regex pattern to match (required for regex type)
+#   validate    — optional post-match validator: "luhn" or "ssn"
+#
+# Builtin-specific fields:
+#   builtin     — detector name: "credit_card" or "ssn" (required for builtin type)
+#
+# Script-specific fields:
+#   script      — path to .rhai file with `fn detect(value)` (required for script type)
+#
+# Allowlist (optional, works with any rule type):
+#   [rules.allowlist]
+#   description — why these are allowed
+#   values      — exact values to skip
+#   patterns    — regex patterns; if any matches, finding is suppressed
+
+# --- Builtin detectors (algorithmic, no regex needed) ---
+
+[[rules]]
+type = "builtin"
+id = "credit-card"
+description = "Credit card numbers (Visa, MC, Amex, Discover)"
+category = "PCI_DSS"
+severity = "critical"
+builtin = "credit_card"
+
+[[rules]]
+type = "builtin"
+id = "ssn"
+description = "US Social Security Numbers"
+category = "PII"
+severity = "critical"
+builtin = "ssn"
+
+# --- Regex rules ---
+
+# [[rules]]
+# id = "email-address"
+# description = "Email addresses"
+# category = "PII"
+# severity = "high"
+# pattern = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+#
+# [rules.allowlist]
+# description = "Internal test emails"
+# values = ["test@example.com"]
+# patterns = ['.*@example\.com$']
+
+# [[rules]]
+# id = "credit-card-regex"
+# description = "Credit card numbers (pattern + Luhn check)"
+# category = "PCI_DSS"
+# severity = "critical"
+# pattern = '\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b'
+# validate = "luhn"
+
+# --- Rhai script rules ---
+
+# [[rules]]
+# type = "script"
+# id = "custom-detector"
+# description = "Custom detection logic"
+# category = "CUSTOM"
+# severity = "medium"
+# script = "scripts/my_detector.rhai"

@@ -1,0 +1,72 @@
+# This is an example .goreleaser.yml file with some sensible defaults.
+# Make sure to check the documentation at https://goreleaser.com
+
+# The lines below are called `modelines`. See `:help modeline`
+# Feel free to remove those if you don't want/need to use them.
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+env:
+  - DOCKER_REGISTRY={{ if index .Env "DOCKER_REGISTRY" }}{{ .Env.DOCKER_REGISTRY }}{{ else }}ghcr.io{{ end }}
+  - DOCKER_USERNAME={{ if index .Env "DOCKER_USERNAME" }}{{ .Env.DOCKER_USERNAME }}{{ else }}mrehbr{{ end }}
+
+before:
+  hooks: []
+
+builds:
+  - builder: rust
+    flags:
+      - --release
+      - -p={{ .ProjectName }}
+    targets:
+      - x86_64-unknown-linux-gnu
+      - aarch64-unknown-linux-gnu
+      - aarch64-apple-darwin
+
+archives:
+  - formats: [tar.gz]
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  split: true
+changelog:
+  disable: false
+
+release:
+  draft: false
+  prerelease: auto
+  mode: replace
+
+dockers_v2:
+  - dockerfile: Dockerfile
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    build_args:
+      BINARY_NAME: "{{ .ProjectName }}"
+    images:
+      - "{{ .Env.DOCKER_REGISTRY }}/{{ tolower .Env.DOCKER_USERNAME }}/{{ .ProjectName }}"
+    tags:
+      - "{{ .Tag }}"
+      - "latest"
+      - "v{{ .Major }}"
+      - "v{{ .Major }}.{{ .Minor }}"
+    labels:
+      org.opencontainers.image.created: "{{.Date}}"
+      org.opencontainers.image.title: "{{.ProjectName}}"
+      org.opencontainers.image.revision: "{{.FullCommit}}"
+      org.opencontainers.image.version: "{{.Version}}"
+      org.opencontainers.image.source: "{{.GitURL}}"
+    extra_files: []

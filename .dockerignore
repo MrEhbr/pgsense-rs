@@ -1,0 +1,50 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Rust build artifacts
+target/
+**/*.rs.bk
+*.pdb
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CI/CD
+.github/
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Testing
+coverage/
+*.profraw
+
+# Benchmarks
+benches/target/
+
+# Pre-commit
+.pre-commit-config.yaml
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Misc
+.env
+.envrc
+*.log
+tmp/
+temp/
+
+# Claude Code
+.claude/
