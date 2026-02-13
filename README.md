@@ -32,7 +32,7 @@ PostgreSQL WAL → etl Pipeline → Scanner → Rule Engine → Alert Dispatcher
 - **Three rule types**: regex with validators, builtin algorithmic detectors, Rhai scripts
 - **Hot reload** — Edit the rules file and changes take effect without restart
 - **Deduplication** — Same (schema, table, column, rule, value) finding is suppressed within a configurable window
-- **Multiple alert channels** — Structured logging, stdout, JSONL file, webhooks with custom headers
+- **Multiple alert channels** — Structured logging, stdout, JSONL file, webhooks, Slack (with batching)
 - **Prometheus metrics** — Events processed, findings by category/severity, alert delivery status, scan latency
 - **Health endpoints** — `/health`, `/ready`, `/metrics` via configurable HTTP server
 - **Column-type filtering** — Automatically skips non-text column types
@@ -182,7 +182,9 @@ src/
 │   ├── dedup.rs         # Deduplication logic
 │   ├── log.rs           # Structured log channel
 │   ├── stdout.rs        # Stdout channel
-│   └── webhook.rs       # HTTP webhook channel
+│   ├── jsonl.rs         # JSONL file channel
+│   ├── webhook.rs       # HTTP webhook channel
+│   └── slack.rs         # Slack channel (batched, with background flush)
 ├── commands/
 │   ├── scan.rs          # `scan` subcommand
 │   └── rules.rs         # `rules list` / `rules test`

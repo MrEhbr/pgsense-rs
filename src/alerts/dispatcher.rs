@@ -3,7 +3,10 @@ use std::time::Duration;
 use anyhow::Result;
 use tracing::{debug, error, info};
 
-use super::{AlertChannel, config::AlertsConfig, dedup::Deduplicator, jsonl::JsonlChannel, log::LogChannel, stdout::StdoutChannel, webhook::WebhookChannel};
+use super::{
+    AlertChannel, config::AlertsConfig, dedup::Deduplicator, jsonl::JsonlChannel, log::LogChannel, slack::SlackChannel, stdout::StdoutChannel,
+    webhook::WebhookChannel,
+};
 use crate::scanner::Finding;
 
 pub struct Dispatcher {
@@ -26,6 +29,9 @@ impl Dispatcher {
         }
         for webhook_config in &config.webhooks {
             channels.push(AlertChannel::Webhook(WebhookChannel::new(webhook_config)?));
+        }
+        for slack_config in &config.slack {
+            channels.push(AlertChannel::Slack(SlackChannel::new(slack_config)?));
         }
 
         info!(channels = channels.len(), "alert dispatcher initialized");
@@ -60,6 +66,14 @@ impl Dispatcher {
         }
     }
 
+    pub async fn flush(&self) {
+        for channel in &self.channels {
+            if let Err(e) = channel.flush().await {
+                error!(channel = channel.name(), error = %e, "flush failed");
+            }
+        }
+    }
+
     pub fn channel_count(&self) -> usize {
         self.channels.len()
     }
@@ -76,23 +90,7 @@ impl Dispatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rules::config::Severity;
-
-    fn test_finding() -> Finding {
-        Finding {
-            rule_id: "test-rule".to_string(),
-            description: "test description".to_string(),
-            category: "test".to_string(),
-            severity: Severity::High,
-            schema_name: "public".to_string(),
-            table_name: "events".to_string(),
-            column_name: "data".to_string(),
-            masked_sample: "***masked***".to_string(),
-            value_hash: 0,
-            primary_keys: vec![],
-            lsn: 1,
-        }
-    }
+    use crate::alerts::testing::test_finding;
 
     #[test]
     fn dispatcher_from_default_config() {
@@ -121,7 +119,7 @@ mod tests {
     async fn dispatch_calls_channel() {
         use std::sync::atomic::Ordering;
 
-        use super::super::test_support::MockChannel;
+        use super::super::testing::MockChannel;
 
         let (mock, count) = MockChannel::new();
         let mut dispatcher = Dispatcher::with_channels(vec![AlertChannel::Mock(mock)]);
@@ -134,7 +132,7 @@ mod tests {
     async fn dispatch_continues_on_channel_error() {
         use std::sync::atomic::Ordering;
 
-        use super::super::test_support::MockChannel;
+        use super::super::testing::MockChannel;
 
         let (failing, fail_count) = MockChannel::failing();
         let (ok, ok_count) = MockChannel::new();

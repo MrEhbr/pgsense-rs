@@ -3,6 +3,7 @@ pub mod dedup;
 pub mod dispatcher;
 pub mod jsonl;
 pub mod log;
+pub mod slack;
 pub mod stdout;
 pub mod webhook;
 
@@ -12,7 +13,7 @@ use anyhow::Result;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use self::{jsonl::JsonlChannel, log::LogChannel, stdout::StdoutChannel, webhook::WebhookChannel};
+use self::{jsonl::JsonlChannel, log::LogChannel, slack::SlackChannel, stdout::StdoutChannel, webhook::WebhookChannel};
 use crate::scanner::Finding;
 
 pub enum AlertChannel {
@@ -20,8 +21,9 @@ pub enum AlertChannel {
     Stdout(StdoutChannel),
     Jsonl(JsonlChannel),
     Webhook(WebhookChannel),
+    Slack(SlackChannel),
     #[cfg(test)]
-    Mock(test_support::MockChannel),
+    Mock(testing::MockChannel),
 }
 
 impl AlertChannel {
@@ -31,8 +33,16 @@ impl AlertChannel {
             AlertChannel::Stdout(ch) => ch.send(finding),
             AlertChannel::Jsonl(ch) => ch.send(finding),
             AlertChannel::Webhook(ch) => ch.send(finding).await,
+            AlertChannel::Slack(ch) => ch.send(finding).await,
             #[cfg(test)]
             AlertChannel::Mock(ch) => ch.send(finding),
+        }
+    }
+
+    pub async fn flush(&self) -> Result<()> {
+        match self {
+            AlertChannel::Slack(ch) => ch.flush().await,
+            _ => Ok(()),
         }
     }
 
@@ -42,6 +52,7 @@ impl AlertChannel {
             AlertChannel::Stdout(_) => "stdout",
             AlertChannel::Jsonl(_) => "jsonl",
             AlertChannel::Webhook(_) => "webhook",
+            AlertChannel::Slack(_) => "slack",
             #[cfg(test)]
             AlertChannel::Mock(_) => "mock",
         }
@@ -84,7 +95,7 @@ impl From<&Finding> for AlertPayload {
 }
 
 #[cfg(test)]
-pub mod test_support {
+pub mod testing {
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -92,7 +103,23 @@ pub mod test_support {
 
     use anyhow::{Result, bail};
 
-    use crate::scanner::Finding;
+    use crate::{rules::config::Severity, scanner::Finding};
+
+    pub fn test_finding() -> Finding {
+        Finding {
+            rule_id: "test-rule".to_string(),
+            description: "test description".to_string(),
+            category: "test".to_string(),
+            severity: Severity::High,
+            schema_name: "public".to_string(),
+            table_name: "events".to_string(),
+            column_name: "data".to_string(),
+            masked_sample: "***masked***".to_string(),
+            value_hash: 0,
+            primary_keys: vec![("id".to_string(), "1".to_string())],
+            lsn: 1,
+        }
+    }
 
     pub struct MockChannel {
         call_count: Arc<AtomicUsize>,
@@ -135,23 +162,7 @@ pub mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rules::config::Severity;
-
-    fn test_finding() -> Finding {
-        Finding {
-            rule_id: "test-rule".to_string(),
-            description: "test description".to_string(),
-            category: "test".to_string(),
-            severity: Severity::High,
-            schema_name: "public".to_string(),
-            table_name: "events".to_string(),
-            column_name: "data".to_string(),
-            masked_sample: "***masked***".to_string(),
-            value_hash: 0,
-            primary_keys: vec![("id".to_string(), "1".to_string())],
-            lsn: 1,
-        }
-    }
+    use crate::alerts::testing::test_finding;
 
     #[test]
     fn alert_payload_from_finding() {

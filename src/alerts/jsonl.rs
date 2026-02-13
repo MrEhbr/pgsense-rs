@@ -51,23 +51,7 @@ mod tests {
     use std::io::BufRead;
 
     use super::*;
-    use crate::rules::config::Severity;
-
-    fn test_finding() -> Finding {
-        Finding {
-            rule_id: "test-rule".to_string(),
-            description: "test description".to_string(),
-            category: "test".to_string(),
-            severity: Severity::Medium,
-            schema_name: "public".to_string(),
-            table_name: "events".to_string(),
-            column_name: "data".to_string(),
-            masked_sample: "***masked***".to_string(),
-            value_hash: 0,
-            primary_keys: vec![("id".to_string(), "1".to_string())],
-            lsn: 1,
-        }
-    }
+    use crate::alerts::testing::test_finding;
 
     #[test]
     fn writes_valid_jsonl() {
@@ -93,7 +77,7 @@ mod tests {
         for line in &lines {
             let payload: AlertPayload = serde_json::from_str(line).unwrap();
             assert_eq!(payload.rule_id, "test-rule");
-            assert_eq!(payload.severity, "MEDIUM");
+            assert_eq!(payload.severity, "HIGH");
             assert_eq!(payload.table_name, "events");
         }
     }

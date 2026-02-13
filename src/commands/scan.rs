@@ -151,6 +151,8 @@ pub async fn run(args: Args) -> Result<()> {
         }
     }
 
+    dispatcher.flush().await;
+
     let events = events_processed;
     let findings = findings_count;
     info!(events, findings, "scan complete");

@@ -84,6 +84,17 @@ path = "./data/alerts.jsonl"   # append-only JSONL file
 # [alerts.webhooks.headers]
 # Authorization = "Bearer token123"
 
+# Slack (repeatable — add multiple [[alerts.slack]] blocks):
+# [[alerts.slack]]
+# token = "xoxb-your-bot-token"         # Bot User OAuth Token (xoxb-...)
+# channel = "#pgsense-alerts"           # Channel name or ID
+# username = "pgsense-bot"              # Optional display name
+# icon_emoji = ":shield:"              # Optional emoji icon
+# timeout_ms = 5000
+# batch_size = 8                        # Findings per message (max 8 to stay within Slack's 50-block limit)
+# batch_window_ms = 2000                # Max wait before flushing a partial batch
+# max_retries = 3                       # Retry attempts on 429 rate-limit responses
+
 # --- HTTP server (health checks + Prometheus metrics) ---
 
 [server]
