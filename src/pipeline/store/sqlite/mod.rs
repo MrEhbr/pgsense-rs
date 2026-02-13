@@ -38,8 +38,6 @@ pub struct SqliteStore {
 }
 
 impl SqliteStore {
-    /// Opens (or creates) a SQLite database at `path` and initializes the
-    /// schema.
     pub async fn new(pipeline_id: u64, path: &str) -> EtlResult<Self> {
         let url = if path == ":memory:" {
             "sqlite::memory:".to_string()
@@ -328,7 +326,6 @@ mod tests {
             .await
             .unwrap();
 
-        // Clear cache, then load from SQLite
         {
             let mut inner = store.inner.lock().await;
             inner.table_replication_states.clear();
@@ -359,7 +356,6 @@ mod tests {
             .await
             .unwrap();
 
-        // Clear cache then reload
         {
             let mut inner = store.inner.lock().await;
             inner.table_mappings.clear();
@@ -420,7 +416,6 @@ mod tests {
         );
         store.store_table_schema(schema).await.unwrap();
 
-        // Clear cache then reload
         {
             let mut inner = store.inner.lock().await;
             inner.table_schemas.clear();

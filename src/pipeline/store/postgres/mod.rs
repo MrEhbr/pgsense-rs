@@ -323,7 +323,6 @@ mod tests {
             .await
             .expect("failed to get port");
 
-        // Retry until PG is ready
         let config = PostgresStoreConfig {
             host: host.clone(),
             port,
@@ -418,7 +417,6 @@ mod tests {
             .await
             .unwrap();
 
-        // Clear cache, then load from Postgres
         {
             let mut inner = store.inner.lock().await;
             inner.table_replication_states.clear();
@@ -450,7 +448,6 @@ mod tests {
             .await
             .unwrap();
 
-        // Clear cache then reload
         {
             let mut inner = store.inner.lock().await;
             inner.table_mappings.clear();
@@ -513,7 +510,6 @@ mod tests {
         );
         store.store_table_schema(schema).await.unwrap();
 
-        // Clear cache then reload
         {
             let mut inner = store.inner.lock().await;
             inner.table_schemas.clear();

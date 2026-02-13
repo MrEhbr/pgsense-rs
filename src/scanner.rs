@@ -17,7 +17,6 @@ pub struct ScanFilter {
     pub exclude_columns: Vec<String>,
 }
 
-/// A detection finding — a rule matched a column value.
 #[derive(Debug, Clone)]
 pub struct Finding {
     pub rule_id: String,

@@ -1,4 +1,3 @@
-/// Mask a value: show first 2 and last 2 characters.
 pub fn mask(s: &str) -> String {
     let chars: Vec<char> = s.chars().collect();
     if chars.len() < 8 {

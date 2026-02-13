@@ -17,8 +17,6 @@ use tokio::time::timeout;
 const CREATE_TABLE: &str = "CREATE TABLE test_data (id SERIAL PRIMARY KEY, col_a TEXT NOT NULL, col_b TEXT)";
 const PUBLICATION: &str = "pgsense_pub";
 
-/// Connect to PostgreSQL with retries, spawning the connection task in the
-/// background.
 async fn pg_client(conn_str: &str) -> tokio_postgres::Client {
     let max_attempts = 10;
     for attempt in 1..=max_attempts {
