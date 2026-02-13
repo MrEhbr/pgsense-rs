@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
@@ -64,8 +64,8 @@ impl Default for JsonlAlertConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WebhookConfig {
     pub url: String,
-    #[serde(default)]
-    pub headers: HashMap<String, String>,
+    #[serde(default, skip_serializing)]
+    pub headers: HashMap<String, SecretString>,
     #[serde(default = "default_timeout_ms")]
     pub timeout_ms: u64,
 }
@@ -74,7 +74,7 @@ fn default_timeout_ms() -> u64 {
     5000
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SlackConfig {
     #[serde(skip_serializing)]
     pub token: SecretString,
@@ -103,19 +103,4 @@ fn default_batch_window_ms() -> u64 {
 
 fn default_max_retries() -> u32 {
     3
-}
-
-impl fmt::Debug for SlackConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SlackConfig")
-            .field("token", &"[REDACTED]")
-            .field("channel", &self.channel)
-            .field("username", &self.username)
-            .field("icon_emoji", &self.icon_emoji)
-            .field("timeout_ms", &self.timeout_ms)
-            .field("batch_size", &self.batch_size)
-            .field("batch_window_ms", &self.batch_window_ms)
-            .field("max_retries", &self.max_retries)
-            .finish()
-    }
 }

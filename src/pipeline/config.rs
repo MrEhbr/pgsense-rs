@@ -10,7 +10,8 @@ pub struct PostgresConfig {
     pub port: u16,
     pub dbname: String,
     pub username: String,
-    pub password: Option<String>,
+    #[serde(skip_serializing)]
+    pub password: Option<SecretString>,
     pub publication: String,
     pub tls: TlsSettings,
 }
@@ -43,7 +44,8 @@ pub struct PostgresStoreConfig {
     pub port: u16,
     pub dbname: String,
     pub username: String,
-    pub password: Option<String>,
+    #[serde(skip_serializing)]
+    pub password: Option<SecretString>,
     pub schema: String,
     pub tls: TlsSettings,
 }
@@ -89,7 +91,7 @@ impl PostgresConfig {
             port: self.port,
             name: self.dbname.clone(),
             username: self.username.clone(),
-            password: self.password.clone().map(SecretString::from),
+            password: self.password.clone(),
             tls: TlsConfig {
                 enabled: self.tls.enabled,
                 trusted_root_certs: self.tls.trusted_root_certs.clone(),

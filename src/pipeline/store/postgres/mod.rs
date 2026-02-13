@@ -14,6 +14,7 @@ use etl::{
     store::{cleanup::CleanupStore, schema::SchemaStore, state::StateStore},
 };
 use etl_postgres::types::{TableId, TableSchema};
+use secrecy::ExposeSecret;
 use sqlx::{
     Executor, PgPool,
     postgres::{PgConnectOptions, PgPoolOptions, PgSslMode},
@@ -59,7 +60,7 @@ impl PostgresStore {
             .ssl_mode(ssl_mode);
 
         if let Some(password) = &config.password {
-            connect_options = connect_options.password(password);
+            connect_options = connect_options.password(password.expose_secret());
         }
 
         let schema = &config.schema;
@@ -297,6 +298,7 @@ mod tests {
         replication::schema::string_to_postgres_type,
         types::{ColumnSchema, TableName},
     };
+    use secrecy::SecretString;
     use testcontainers_modules::{
         postgres::Postgres,
         testcontainers::{ImageExt, runners::AsyncRunner},
@@ -327,7 +329,7 @@ mod tests {
             port,
             dbname: "postgres".to_string(),
             username: "postgres".to_string(),
-            password: Some("postgres".to_string()),
+            password: Some(SecretString::from("postgres")),
             schema: "pgsense_test".to_string(),
             tls: Default::default(),
         };

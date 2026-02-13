@@ -7,6 +7,7 @@ use pgsense_rs::{
         runner::PipelineRunner,
     },
 };
+use secrecy::SecretString;
 use testcontainers_modules::{
     postgres::Postgres,
     testcontainers::{ImageExt, runners::AsyncRunner},
@@ -208,7 +209,7 @@ async fn pipeline_receives_insert_events() {
         port,
         dbname: "postgres".to_string(),
         username: "postgres".to_string(),
-        password: Some("postgres".to_string()),
+        password: Some(SecretString::from("postgres")),
         publication: PUBLICATION.to_string(),
         ..Default::default()
     };
@@ -226,7 +227,7 @@ async fn pipeline_receives_insert_events_sqlite() {
         port,
         dbname: "postgres".to_string(),
         username: "postgres".to_string(),
-        password: Some("postgres".to_string()),
+        password: Some(SecretString::from("postgres")),
         publication: PUBLICATION.to_string(),
         ..Default::default()
     };
@@ -252,7 +253,7 @@ async fn pipeline_receives_insert_events_postgres_store() {
         port,
         dbname: "postgres".to_string(),
         username: "postgres".to_string(),
-        password: Some("postgres".to_string()),
+        password: Some(SecretString::from("postgres")),
         publication: PUBLICATION.to_string(),
         ..Default::default()
     };
@@ -260,7 +261,7 @@ async fn pipeline_receives_insert_events_postgres_store() {
         store: StoreType::Postgres(PostgresStoreConfig {
             host: host.clone(),
             port,
-            password: Some("postgres".to_string()),
+            password: Some(SecretString::from("postgres")),
             ..Default::default()
         }),
         ..PipelineSettings::default()
@@ -283,7 +284,7 @@ async fn pipeline_catches_up_after_restart_sqlite() {
         port,
         dbname: "postgres".to_string(),
         username: "postgres".to_string(),
-        password: Some("postgres".to_string()),
+        password: Some(SecretString::from("postgres")),
         publication: PUBLICATION.to_string(),
         ..Default::default()
     };
@@ -309,7 +310,7 @@ async fn pipeline_catches_up_after_restart_postgres_store() {
         port,
         dbname: "postgres".to_string(),
         username: "postgres".to_string(),
-        password: Some("postgres".to_string()),
+        password: Some(SecretString::from("postgres")),
         publication: PUBLICATION.to_string(),
         ..Default::default()
     };
@@ -317,7 +318,7 @@ async fn pipeline_catches_up_after_restart_postgres_store() {
         store: StoreType::Postgres(PostgresStoreConfig {
             host: host.clone(),
             port,
-            password: Some("postgres".to_string()),
+            password: Some(SecretString::from("postgres")),
             ..Default::default()
         }),
         ..PipelineSettings::default()

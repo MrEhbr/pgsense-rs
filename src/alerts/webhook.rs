@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use secrecy::ExposeSecret;
 
 use super::{AlertPayload, config::WebhookConfig};
 use crate::scanner::Finding;
@@ -18,6 +19,7 @@ impl WebhookChannel {
                 .parse::<reqwest::header::HeaderName>()
                 .with_context(|| format!("invalid header name: {key}"))?;
             let val = value
+                .expose_secret()
                 .parse::<reqwest::header::HeaderValue>()
                 .with_context(|| format!("invalid header value for {key}"))?;
             headers.insert(name, val);
@@ -57,13 +59,15 @@ impl WebhookChannel {
 mod tests {
     use std::collections::HashMap;
 
+    use secrecy::SecretString;
+
     use super::*;
 
     #[test]
     fn webhook_channel_builds_from_config() {
         let config = WebhookConfig {
             url: "https://hooks.example.com/alert".to_string(),
-            headers: HashMap::from([("Authorization".to_string(), "Bearer tok".to_string())]),
+            headers: HashMap::from([("Authorization".to_string(), SecretString::from("Bearer tok"))]),
             timeout_ms: 3000,
         };
         let channel = WebhookChannel::new(&config).unwrap();
@@ -74,7 +78,7 @@ mod tests {
     fn webhook_rejects_invalid_header() {
         let config = WebhookConfig {
             url: "https://hooks.example.com".to_string(),
-            headers: HashMap::from([("Invalid\nHeader".to_string(), "value".to_string())]),
+            headers: HashMap::from([("Invalid\nHeader".to_string(), SecretString::from("value"))]),
             timeout_ms: 5000,
         };
         assert!(WebhookChannel::new(&config).is_err());
