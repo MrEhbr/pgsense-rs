@@ -67,7 +67,9 @@ pub async fn run(args: Args) -> Result<()> {
         .context("no rules file specified — use --rules <FILE> or set rules_file in config")?;
     let mut scanner = build_scanner(rules_path, &config.scan)?;
 
-    let mut dispatcher = Dispatcher::from_config(&config.alerts).context("failed to initialize alert dispatcher")?;
+    let mut dispatcher = Dispatcher::from_config(&config.alerts)
+        .await
+        .context("failed to initialize alert dispatcher")?;
     info!(channels = dispatcher.channel_count(), "alert dispatcher ready");
 
     let mut runner = PipelineRunner::new(args.pipeline_id, &config.postgres, &config.pipeline)

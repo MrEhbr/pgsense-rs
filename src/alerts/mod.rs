@@ -3,6 +3,7 @@ pub mod dedup;
 pub mod dispatcher;
 pub mod jsonl;
 pub mod log;
+pub mod postgres;
 pub mod slack;
 pub mod stdout;
 pub mod webhook;
@@ -13,7 +14,7 @@ use anyhow::Result;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use self::{jsonl::JsonlChannel, log::LogChannel, slack::SlackChannel, stdout::StdoutChannel, webhook::WebhookChannel};
+use self::{jsonl::JsonlChannel, log::LogChannel, postgres::PostgresChannel, slack::SlackChannel, stdout::StdoutChannel, webhook::WebhookChannel};
 use crate::scanner::Finding;
 
 pub enum AlertChannel {
@@ -22,6 +23,7 @@ pub enum AlertChannel {
     Jsonl(JsonlChannel),
     Webhook(WebhookChannel),
     Slack(SlackChannel),
+    Postgres(PostgresChannel),
     #[cfg(test)]
     Mock(testing::MockChannel),
 }
@@ -34,6 +36,7 @@ impl AlertChannel {
             AlertChannel::Jsonl(ch) => ch.send(finding),
             AlertChannel::Webhook(ch) => ch.send(finding).await,
             AlertChannel::Slack(ch) => ch.send(finding).await,
+            AlertChannel::Postgres(ch) => ch.send(finding).await,
             #[cfg(test)]
             AlertChannel::Mock(ch) => ch.send(finding),
         }
@@ -53,6 +56,7 @@ impl AlertChannel {
             AlertChannel::Jsonl(_) => "jsonl",
             AlertChannel::Webhook(_) => "webhook",
             AlertChannel::Slack(_) => "slack",
+            AlertChannel::Postgres(_) => "postgres",
             #[cfg(test)]
             AlertChannel::Mock(_) => "mock",
         }

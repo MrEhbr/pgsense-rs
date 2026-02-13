@@ -4,8 +4,8 @@ use anyhow::Result;
 use tracing::{debug, error, info};
 
 use super::{
-    AlertChannel, config::AlertsConfig, dedup::Deduplicator, jsonl::JsonlChannel, log::LogChannel, slack::SlackChannel, stdout::StdoutChannel,
-    webhook::WebhookChannel,
+    AlertChannel, config::AlertsConfig, dedup::Deduplicator, jsonl::JsonlChannel, log::LogChannel, postgres::PostgresChannel, slack::SlackChannel,
+    stdout::StdoutChannel, webhook::WebhookChannel,
 };
 use crate::scanner::Finding;
 
@@ -15,7 +15,7 @@ pub struct Dispatcher {
 }
 
 impl Dispatcher {
-    pub fn from_config(config: &AlertsConfig) -> Result<Self> {
+    pub async fn from_config(config: &AlertsConfig) -> Result<Self> {
         let mut channels = Vec::new();
 
         if config.log.enabled {
@@ -32,6 +32,9 @@ impl Dispatcher {
         }
         for slack_config in &config.slack {
             channels.push(AlertChannel::Slack(SlackChannel::new(slack_config)?));
+        }
+        if let Some(pg_config) = &config.postgres {
+            channels.push(AlertChannel::Postgres(PostgresChannel::new(pg_config).await?));
         }
 
         info!(channels = channels.len(), "alert dispatcher initialized");
@@ -92,15 +95,15 @@ mod tests {
     use super::*;
     use crate::alerts::testing::test_finding;
 
-    #[test]
-    fn dispatcher_from_default_config() {
+    #[tokio::test]
+    async fn dispatcher_from_default_config() {
         let config = AlertsConfig::default();
-        let dispatcher = Dispatcher::from_config(&config).unwrap();
+        let dispatcher = Dispatcher::from_config(&config).await.unwrap();
         assert_eq!(dispatcher.channel_count(), 1); // log enabled by default
     }
 
-    #[test]
-    fn dispatcher_with_all_channels() {
+    #[tokio::test]
+    async fn dispatcher_with_all_channels() {
         let config = AlertsConfig {
             log: super::super::config::LogAlertConfig { enabled: true },
             stdout: super::super::config::StdoutAlertConfig { enabled: true },
@@ -111,7 +114,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let dispatcher = Dispatcher::from_config(&config).unwrap();
+        let dispatcher = Dispatcher::from_config(&config).await.unwrap();
         assert_eq!(dispatcher.channel_count(), 3);
     }
 
@@ -151,7 +154,7 @@ mod tests {
             webhooks: vec![],
             ..Default::default()
         };
-        let mut dispatcher = Dispatcher::from_config(&config).unwrap();
+        let mut dispatcher = Dispatcher::from_config(&config).await.unwrap();
         let finding = test_finding();
 
         // Both calls succeed (no channels to fail), but second is deduplicated

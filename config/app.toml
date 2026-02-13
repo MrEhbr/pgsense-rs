@@ -95,6 +95,18 @@ path = "./data/alerts.jsonl"   # append-only JSONL file
 # batch_window_ms = 2000                # Max wait before flushing a partial batch
 # max_retries = 3                       # Retry attempts on 429 rate-limit responses
 
+# PostgreSQL — writes findings to a queryable table for dashboarding, retention, and auditing:
+# [alerts.postgres]
+# host = "localhost"
+# port = 5432
+# dbname = "pgsense_findings"
+# username = "postgres"
+# password = "postgres"
+# schema = "pgsense"                    # schema for findings table (created if missing)
+# table = "findings"                    # table name (created if missing)
+# [alerts.postgres.tls]
+# enabled = false
+
 # --- HTTP server (health checks + Prometheus metrics) ---
 
 [server]

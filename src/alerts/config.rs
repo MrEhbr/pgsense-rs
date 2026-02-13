@@ -3,6 +3,8 @@ use std::{collections::HashMap, path::PathBuf};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
+use crate::pipeline::config::TlsSettings;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct AlertsConfig {
@@ -12,6 +14,7 @@ pub struct AlertsConfig {
     pub jsonl: JsonlAlertConfig,
     pub webhooks: Vec<WebhookConfig>,
     pub slack: Vec<SlackConfig>,
+    pub postgres: Option<PostgresAlertConfig>,
 }
 
 impl Default for AlertsConfig {
@@ -23,6 +26,36 @@ impl Default for AlertsConfig {
             jsonl: JsonlAlertConfig::default(),
             webhooks: Vec::new(),
             slack: Vec::new(),
+            postgres: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct PostgresAlertConfig {
+    pub host: String,
+    pub port: u16,
+    pub dbname: String,
+    pub username: String,
+    #[serde(skip_serializing)]
+    pub password: Option<SecretString>,
+    pub schema: String,
+    pub table: String,
+    pub tls: TlsSettings,
+}
+
+impl Default for PostgresAlertConfig {
+    fn default() -> Self {
+        Self {
+            host: "localhost".to_string(),
+            port: 5432,
+            dbname: "postgres".to_string(),
+            username: "postgres".to_string(),
+            password: None,
+            schema: "pgsense".to_string(),
+            table: "findings".to_string(),
+            tls: TlsSettings::default(),
         }
     }
 }
