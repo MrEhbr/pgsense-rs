@@ -96,6 +96,23 @@ builtin = "phone"
 # include_tables = ["users", "employees"]
 # exclude_columns = ["ssn_hash"]
 
+# --- Per-rule channel routing ---
+#
+# By default all findings fan out to every enabled alert channel.
+# Set `channels` to route a rule's findings to specific channels only.
+# Channel names: "log", "stdout", "jsonl", "webhook"/"webhook-N",
+#                "slack"/"slack-N", "postgres", or custom names set
+#                via the `name` field on channel configs.
+#
+# [[rules]]
+# id = "pci-card"
+# description = "Credit card — route to security Slack only"
+# category = "PCI_DSS"
+# severity = "critical"
+# type = "builtin"
+# builtin = "credit_card"
+# channels = ["security-slack", "security-webhook"]
+
 # --- Rhai script rules ---
 
 # [[rules]]

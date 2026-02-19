@@ -24,7 +24,7 @@ PostgreSQL WAL → etl Pipeline → Scanner → Rule Engine → Alert Dispatcher
    - **Regex rules** — RegexSet fast-path for bulk filtering, then individual regex match + optional validator (Luhn, SSN checksum, phone)
    - **Builtin detectors** — Algorithmic scanning with boundary-aware matching (credit cards, SSNs, phone numbers)
    - **Rhai scripts** — Custom detection logic in sandboxed scripts
-4. **Alert Dispatcher** — Deduplicates findings by (schema, table, column, rule, value) within a configurable window, then fans out to all enabled channels
+4. **Alert Dispatcher** — Deduplicates findings by (schema, table, column, rule, value) within a configurable window, then routes to named alert channels (all channels by default, or specific channels per rule)
 
 ## Features
 
@@ -32,7 +32,7 @@ PostgreSQL WAL → etl Pipeline → Scanner → Rule Engine → Alert Dispatcher
 - **Three rule types**: regex with validators, builtin algorithmic detectors, Rhai scripts
 - **Hot reload** — Edit the rules file and changes take effect without restart
 - **Deduplication** — Same (schema, table, column, rule, value) finding is suppressed within a configurable window
-- **Multiple alert channels** — Structured logging, stdout, JSONL file, webhooks, Slack (with batching), PostgreSQL table
+- **Multiple alert channels** — Structured logging, stdout, JSONL file, webhooks, Slack (with batching), PostgreSQL table — with optional per-rule routing
 - **Prometheus metrics** — Events processed, findings by category/severity, alert delivery status, scan latency
 - **Health endpoints** — `/health`, `/ready`, `/metrics` via configurable HTTP server
 - **Column-type filtering** — Automatically skips non-text column types
@@ -112,7 +112,7 @@ category = "CUSTOM"
 severity = "medium"
 ```
 
-Rules support `validate` (Luhn/SSN checksum), `allowlist` (exact values + patterns), `scope` (restrict to specific tables/columns), and all standard fields. See [`config/rules.toml`](config/rules.toml) for the complete reference.
+Rules support `validate` (Luhn/SSN checksum), `allowlist` (exact values + patterns), `scope` (restrict to specific tables/columns), `channels` (route findings to specific alert channels), and all standard fields. See [`config/rules.toml`](config/rules.toml) for the complete reference.
 
 ## CLI
 

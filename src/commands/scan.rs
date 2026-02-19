@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::{
@@ -17,7 +18,7 @@ use crate::{
     config::Config,
     metrics::Metrics,
     pipeline::runner::PipelineRunner,
-    rules::engine::RuleEngine,
+    rules::{config::RuleConfig, engine::RuleEngine},
     scanner::{ScanFilter, Scanner},
     server::ServerState,
 };
@@ -65,11 +66,12 @@ pub async fn run(args: Args) -> Result<()> {
         .as_deref()
         .or(config.rules_file.as_deref())
         .context("no rules file specified — use --rules <FILE> or set rules_file in config")?;
-    let mut scanner = build_scanner(rules_path, &config.scan)?;
+    let (mut scanner, rules) = build_scanner(rules_path, &config.scan)?;
 
     let mut dispatcher = Dispatcher::from_config(&config.alerts)
         .await
         .context("failed to initialize alert dispatcher")?;
+    validate_channel_routing(&rules, &dispatcher);
     info!(channels = dispatcher.channel_count(), "alert dispatcher ready");
 
     let mut runner = PipelineRunner::new(args.pipeline_id, &config.postgres, &config.pipeline)
@@ -137,7 +139,8 @@ pub async fn run(args: Args) -> Result<()> {
                 // Drain any extra notifications that arrived during the delay
                 while rules_rx.try_recv().is_ok() {}
                 match build_scanner(&rules_path, &config.scan) {
-                    Ok(new_scanner) => {
+                    Ok((new_scanner, new_rules)) => {
+                        validate_channel_routing(&new_rules, &dispatcher);
                         info!(rules = new_scanner.rule_count(), path = %rules_path.display(), "rules hot-reloaded");
                         scanner = new_scanner;
                     }
@@ -162,13 +165,26 @@ pub async fn run(args: Args) -> Result<()> {
     Ok(())
 }
 
-fn build_scanner(rules_path: &Path, scan_filter: &ScanFilter) -> Result<Scanner> {
+fn build_scanner(rules_path: &Path, scan_filter: &ScanFilter) -> Result<(Scanner, Vec<RuleConfig>)> {
     let rules = crate::config::load_rules(rules_path).context("failed to load rules")?;
     info!(rules = rules.len(), path = %rules_path.display(), "rules loaded");
     let engine = RuleEngine::new(&rules).context("failed to compile detection rules")?;
     let scanner = Scanner::new(engine, scan_filter.clone());
     info!(rules = scanner.rule_count(), "detection engine ready");
-    Ok(scanner)
+    Ok((scanner, rules))
+}
+
+fn validate_channel_routing(rules: &[RuleConfig], dispatcher: &Dispatcher) {
+    let known: HashSet<&str> = dispatcher.channel_names().into_iter().collect();
+    for rule in rules {
+        if let Some(channels) = &rule.channels {
+            for ch in channels {
+                if !known.contains(ch.as_str()) {
+                    warn!(rule_id = %rule.id, channel = %ch, "rule references unknown alert channel");
+                }
+            }
+        }
+    }
 }
 
 fn apply_overrides(args: &Args, config: Config) -> Config {

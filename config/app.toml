@@ -79,6 +79,7 @@ path = "./data/alerts.jsonl"   # append-only JSONL file
 
 # Webhook (repeatable — add multiple [[alerts.webhooks]] blocks):
 # [[alerts.webhooks]]
+# name = "security-webhook"             # optional name for per-rule routing (default: "webhook" or "webhook-N")
 # url = "https://hooks.example.com/alert"
 # timeout_ms = 5000
 # [alerts.webhooks.headers]
@@ -86,6 +87,7 @@ path = "./data/alerts.jsonl"   # append-only JSONL file
 
 # Slack (repeatable — add multiple [[alerts.slack]] blocks):
 # [[alerts.slack]]
+# name = "security-slack"               # optional name for per-rule routing (default: "slack" or "slack-N")
 # token = "xoxb-your-bot-token"         # Bot User OAuth Token (xoxb-...)
 # channel = "#pgsense-alerts"           # Channel name or ID
 # username = "pgsense-bot"              # Optional display name
@@ -97,6 +99,7 @@ path = "./data/alerts.jsonl"   # append-only JSONL file
 
 # PostgreSQL — writes findings to a queryable table for dashboarding, retention, and auditing:
 # [alerts.postgres]
+# name = "postgres"                     # optional name for per-rule routing (default: "postgres")
 # host = "localhost"
 # port = 5432
 # dbname = "pgsense_findings"
