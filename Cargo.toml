@@ -35,6 +35,7 @@ etl-postgres = { git = "https://github.com/supabase/etl", rev = "4f1141e" }
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "postgres", "migrate", "json"] }
 
 # Detection
+phonenumber = "0.3"
 regex = "1"
 rhai = "1"
 

@@ -5,8 +5,8 @@ use regex::{Regex, RegexSet};
 use tracing::debug;
 
 use super::{
-    builtin_detectors::BuiltinDetector,
     config::{RuleConfig, RuleType, Severity, Validator},
+    detectors::Detector,
     script, validators,
 };
 
@@ -20,7 +20,7 @@ pub struct RuleMetadata {
 
 pub enum RuleKind {
     Regex { regex: Regex, validator: Option<Validator> },
-    Builtin(BuiltinDetector),
+    Builtin(Detector),
     Script { ast: rhai::AST },
 }
 
@@ -95,7 +95,7 @@ impl RuleEngine {
                     let builtin_kind = c.builtin.unwrap_or_else(|| {
                         panic!("builtin rule '{}' requires a `builtin` field", c.id);
                     });
-                    RuleKind::Builtin(BuiltinDetector::from_kind(builtin_kind))
+                    RuleKind::Builtin(Detector::from_kind(builtin_kind))
                 },
                 RuleType::Script => {
                     let path = c.script.as_ref().unwrap_or_else(|| {
@@ -248,8 +248,6 @@ mod tests {
         f
     }
 
-    // === Compilation ===
-
     #[test]
     fn empty_config_compiles_to_empty_engine() {
         let engine = RuleEngine::new(&[]).unwrap();
@@ -268,11 +266,7 @@ mod tests {
         );
     }
 
-    // === RegexSet index mapping ===
-    // The engine builds a RegexSet from only regex rules, then maps set
-    // match indices back to the original rules[] positions. Interleaving
-    // builtins must not corrupt this mapping.
-
+    // Interleaving builtins must not corrupt the RegexSet→rules[] index mapping.
     #[test]
     fn regex_indices_skip_non_regex_rules() {
         let configs = vec![
@@ -306,8 +300,6 @@ mod tests {
         assert_eq!(m[0].rule.id, "r2");
     }
 
-    // === Phase orchestration ===
-
     #[test]
     fn all_three_phases_contribute_results() {
         let script = tmp_script(r#"fn detect(value) { if value.contains("KEYWORD") { ["KEYWORD"] } else { [] } }"#);
@@ -337,8 +329,6 @@ mod tests {
         assert!(ids.contains(&"s1"), "script phase missing");
     }
 
-    // === Validator gating ===
-
     #[rstest]
     #[case("4111111111111111", 1)]
     #[case("4111111111111112", 0)]
@@ -352,8 +342,6 @@ mod tests {
         assert_eq!(engine.scan_value(input).len(), expected);
     }
 
-    // === Match extraction ===
-
     #[test]
     fn matched_text_is_the_match_not_full_input() {
         let engine = RuleEngine::new(&[RuleConfig {
@@ -364,8 +352,6 @@ mod tests {
         let m = engine.scan_value("abc 123 def");
         assert_eq!(m[0].matched_text, "123");
     }
-
-    // === Allowlist ===
 
     #[rstest]
     #[case("exact_hit",    Some(Allowlist { description: None, values: vec!["noreply@example.com".into()], patterns: vec![] }), "noreply@example.com", 0)]
@@ -399,5 +385,23 @@ mod tests {
         }];
         let engine = RuleEngine::new(&configs).unwrap();
         assert_eq!(engine.scan_value(input).len(), expected);
+    }
+
+    #[test]
+    fn phone_builtin_through_engine() {
+        let configs = vec![RuleConfig {
+            rule_type: RuleType::Builtin,
+            builtin: Some(BuiltinKind::Phone),
+            ..cfg("phone")
+        }];
+        let engine = RuleEngine::new(&configs).unwrap();
+
+        let m = engine.scan_value("call +44 20 7946 0958 now");
+        assert_eq!(m.len(), 1);
+        assert_eq!(m[0].rule.id, "phone");
+        assert_eq!(m[0].matched_text, "+44 20 7946 0958");
+
+        // bare digits should not match
+        assert!(engine.scan_value("1234567890").is_empty());
     }
 }

@@ -17,3 +17,7 @@ path = "targets/credit_cards.rs"
 [[bin]]
 name = "ssns"
 path = "targets/ssns.rs"
+
+[[bin]]
+name = "phones"
+path = "targets/phones.rs"

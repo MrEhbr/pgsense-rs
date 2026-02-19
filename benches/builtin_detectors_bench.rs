@@ -1,13 +1,10 @@
 use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use pgsense_rs::rules::builtin_detectors::BuiltinDetector;
+use pgsense_rs::rules::detectors::Detector;
 
-// ---------------------------------------------------------------------------
-// Helpers — adding a new builtin detector = one function calling these
-// ---------------------------------------------------------------------------
-
-fn bench_detector_cases(c: &mut Criterion, prefix: &str, detector: BuiltinDetector, cases: &[(&str, &str)]) {
+// Adding a new builtin detector = one function calling these two helpers
+fn bench_detector_cases(c: &mut Criterion, prefix: &str, detector: Detector, cases: &[(&str, &str)]) {
     let mut group = c.benchmark_group(prefix);
     for &(label, input) in cases {
         group.bench_function(label, |b| {
@@ -17,7 +14,7 @@ fn bench_detector_cases(c: &mut Criterion, prefix: &str, detector: BuiltinDetect
     group.finish();
 }
 
-fn bench_detector_scaling(c: &mut Criterion, prefix: &str, detector: BuiltinDetector, match_str: &str, sizes: &[usize]) {
+fn bench_detector_scaling(c: &mut Criterion, prefix: &str, detector: Detector, match_str: &str, sizes: &[usize]) {
     let mut group = c.benchmark_group(format!("{prefix}/value_size"));
     for &size in sizes {
         let padding = "a".repeat(size.saturating_sub(match_str.len() + 5));
@@ -29,17 +26,13 @@ fn bench_detector_scaling(c: &mut Criterion, prefix: &str, detector: BuiltinDete
     group.finish();
 }
 
-// ---------------------------------------------------------------------------
-// Credit card detector
-// ---------------------------------------------------------------------------
-
 fn bench_credit_card(c: &mut Criterion) {
     let dense_digits = "1234567890".repeat(20);
 
     bench_detector_cases(
         c,
         "cc_scan",
-        BuiltinDetector::CreditCard,
+        Detector::CreditCard,
         &[
             ("short_match", "pay with 4111111111111111 please"),
             ("short_no_match", "just some ordinary text here"),
@@ -51,18 +44,8 @@ fn bench_credit_card(c: &mut Criterion) {
         ],
     );
 
-    bench_detector_scaling(
-        c,
-        "cc_scan",
-        BuiltinDetector::CreditCard,
-        "4111111111111111",
-        &[64, 256, 1024, 4096],
-    );
+    bench_detector_scaling(c, "cc_scan", Detector::CreditCard, "4111111111111111", &[64, 256, 1024, 4096]);
 }
-
-// ---------------------------------------------------------------------------
-// SSN detector
-// ---------------------------------------------------------------------------
 
 fn bench_ssn(c: &mut Criterion) {
     let near_misses = (0..20)
@@ -73,7 +56,7 @@ fn bench_ssn(c: &mut Criterion) {
     bench_detector_cases(
         c,
         "ssn_scan",
-        BuiltinDetector::Ssn,
+        Detector::Ssn,
         &[
             ("short_match", "ssn is 123-45-6789"),
             ("short_no_match", "just some ordinary text here"),
@@ -82,12 +65,28 @@ fn bench_ssn(c: &mut Criterion) {
         ],
     );
 
-    bench_detector_scaling(c, "ssn_scan", BuiltinDetector::Ssn, "123-45-6789", &[64, 256, 1024, 4096]);
+    bench_detector_scaling(c, "ssn_scan", Detector::Ssn, "123-45-6789", &[64, 256, 1024, 4096]);
 }
 
-// ---------------------------------------------------------------------------
-// Harness
-// ---------------------------------------------------------------------------
+fn bench_phone(c: &mut Criterion) {
+    bench_detector_cases(
+        c,
+        "phone_scan",
+        Detector::Phone,
+        &[
+            ("e164_match", "call +44 20 7946 0958 for info"),
+            ("nanp_match", "phone: (555) 234-5678"),
+            ("short_no_match", "just some ordinary text here"),
+            (
+                "multiple_matches",
+                "phones: +1 555 123 4567, (212) 555-9876, 0044 20 7946 0958 end",
+            ),
+            ("dense_digits", "1234567890123456789012345678901234567890"),
+        ],
+    );
 
-criterion_group!(benches, bench_credit_card, bench_ssn);
+    bench_detector_scaling(c, "phone_scan", Detector::Phone, "+44 20 7946 0958", &[64, 256, 1024, 4096]);
+}
+
+criterion_group!(benches, bench_credit_card, bench_ssn, bench_phone);
 criterion_main!(benches);

@@ -1,5 +1,5 @@
-pub mod builtin_detectors;
 pub mod config;
+pub mod detectors;
 pub mod engine;
 pub mod masking;
 pub mod script;

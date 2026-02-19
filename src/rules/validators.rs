@@ -30,6 +30,20 @@ pub fn luhn(s: &str) -> bool {
     sum.is_multiple_of(10)
 }
 
+/// Validate a phone number using libphonenumber.
+/// Handles E.164 (`+` prefix), `00` dial prefix, and bare NANP numbers.
+pub fn phone(s: &str) -> bool {
+    if s.starts_with('+') {
+        phonenumber::parse(None, s)
+    } else if let Some(rest) = s.strip_prefix("00") {
+        phonenumber::parse(None, format!("+{rest}"))
+    } else {
+        // Bare NANP — US covers all NANP regions (US, CA, Caribbean share CC 1)
+        phonenumber::parse(Some(phonenumber::country::US), s)
+    }
+    .is_ok_and(|n| phonenumber::is_valid(&n))
+}
+
 /// Validate a US Social Security Number format and check for invalid ranges.
 /// Accepts `XXX-XX-XXXX`, `XXX XX XXXX`, and `XXX.XX.XXXX` formats.
 pub fn ssn(s: &str) -> bool {
@@ -108,5 +122,20 @@ mod tests {
     #[case("", false)]
     fn ssn_validation(#[case] input: &str, #[case] expected: bool) {
         assert_eq!(ssn(input), expected, "ssn({input:?})");
+    }
+
+    #[rstest]
+    #[case("+44 20 7946 0958", true)]
+    #[case("+1 212 234 5678", true)]
+    #[case("+86 138 0013 8000", true)]
+    #[case("0044 20 7946 0958", true)]
+    #[case("(212) 234-5678", true)]
+    #[case("312-456-7890", true)]
+    #[case("(555) 234-5678", false)] // 555 is fictional
+    #[case("+999 1234567", false)] // invalid country code
+    #[case("not a phone", false)]
+    #[case("", false)]
+    fn phone_validation(#[case] input: &str, #[case] expected: bool) {
+        assert_eq!(phone(input), expected, "phone({input:?})");
     }
 }

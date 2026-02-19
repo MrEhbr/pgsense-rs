@@ -64,6 +64,7 @@ impl fmt::Display for RuleType {
 #[serde(rename_all = "snake_case")]
 pub enum BuiltinKind {
     CreditCard,
+    Phone,
     Ssn,
 }
 

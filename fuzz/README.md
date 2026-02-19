@@ -6,8 +6,9 @@ AFL-based fuzz tests for pgsense-rs builtin detectors. These verify that detecto
 
 | Target | Detector | Invariants checked |
 |--------|----------|--------------------|
-| `credit_cards` | `BuiltinDetector::CreditCard` | Luhn valid, digits + separators only, 13-19 digits |
-| `ssns` | `BuiltinDetector::Ssn` | SSN valid, 11 chars, consistent separators (`-` ` ` `.`) |
+| `credit_cards` | `Detector::CreditCard` | Luhn valid, digits + separators only, 13-19 digits |
+| `ssns` | `Detector::Ssn` | SSN valid, 11 chars, consistent separators (`-` ` ` `.`) |
+| `phones` | `Detector::Phone` | 7-15 digits, valid phone chars only, correct start char |
 
 ## Running
 

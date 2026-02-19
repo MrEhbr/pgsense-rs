@@ -78,6 +78,26 @@ fn test_scan_appears_in_help() {
 }
 
 #[test]
+fn test_rules_list_shows_phone() {
+    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"));
+    cmd.args(["rules", "--rules", "config/rules.toml", "list"]);
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("phone"));
+}
+
+#[test]
+fn test_rules_test_detects_phone() {
+    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"));
+    cmd.args(["rules", "--rules", "config/rules.toml", "test", "--input", "+44 20 7946 0958"]);
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("phone"));
+}
+
+#[test]
 fn test_invalid_command() {
     let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"));
     cmd.arg("nonexistent");

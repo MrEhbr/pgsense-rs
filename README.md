@@ -21,8 +21,8 @@ PostgreSQL WAL → etl Pipeline → Scanner → Rule Engine → Alert Dispatcher
 1. **Pipeline** — Connects to PostgreSQL's [logical replication stream](https://www.postgresql.org/docs/current/logical-replication.html) via [supabase/etl](https://github.com/supabase/etl), batches change events, and forwards them through an internal channel
 2. **Scanner** — Filters out non-text columns (integers, booleans, timestamps, UUIDs, bytea) to reduce noise, then passes text values to the rule engine
 3. **Rule Engine** — Three-phase detection:
-   - **Regex rules** — RegexSet fast-path for bulk filtering, then individual regex match + optional validator (Luhn, SSN checksum)
-   - **Builtin detectors** — Algorithmic scanning with boundary-aware matching (credit cards, SSNs)
+   - **Regex rules** — RegexSet fast-path for bulk filtering, then individual regex match + optional validator (Luhn, SSN checksum, phone)
+   - **Builtin detectors** — Algorithmic scanning with boundary-aware matching (credit cards, SSNs, phone numbers)
    - **Rhai scripts** — Custom detection logic in sandboxed scripts
 4. **Alert Dispatcher** — Deduplicates findings by (schema, table, column, rule, value) within a configurable window, then fans out to all enabled channels
 
@@ -174,7 +174,7 @@ src/
 │   ├── engine.rs        # RuleEngine (RegexSet fast-path)
 │   ├── config.rs        # Rule/severity/validator types
 │   ├── validators.rs    # Luhn, SSN validators
-│   ├── builtin_detectors.rs  # Algorithmic CC/SSN detection
+│   ├── detectors/       # Algorithmic CC/SSN/phone detection
 │   ├── masking.rs       # Value masking for output
 │   └── script.rs        # Rhai script execution
 ├── alerts/

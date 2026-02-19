@@ -45,6 +45,14 @@ category = "PII"
 severity = "critical"
 builtin = "ssn"
 
+[[rules]]
+type = "builtin"
+id = "phone"
+description = "Phone numbers (E.164, NANP, international 00-prefix)"
+category = "PII"
+severity = "high"
+builtin = "phone"
+
 # --- Regex rules ---
 
 # [[rules]]
