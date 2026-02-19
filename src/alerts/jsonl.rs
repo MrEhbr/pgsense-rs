@@ -60,6 +60,7 @@ mod tests {
 
         let config = JsonlAlertConfig {
             enabled: true,
+            name: None,
             path: path.clone(),
         };
 
@@ -89,6 +90,7 @@ mod tests {
 
         let config = JsonlAlertConfig {
             enabled: true,
+            name: None,
             path: path.clone(),
         };
 

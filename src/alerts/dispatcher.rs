@@ -108,6 +108,7 @@ mod tests {
             log: super::super::config::LogAlertConfig { enabled: true },
             stdout: super::super::config::StdoutAlertConfig { enabled: true },
             webhooks: vec![super::super::config::WebhookConfig {
+                name: None,
                 url: "https://hooks.example.com".to_string(),
                 headers: Default::default(),
                 timeout_ms: 5000,

@@ -66,6 +66,7 @@ mod tests {
     #[test]
     fn webhook_channel_builds_from_config() {
         let config = WebhookConfig {
+            name: None,
             url: "https://hooks.example.com/alert".to_string(),
             headers: HashMap::from([("Authorization".to_string(), SecretString::from("Bearer tok"))]),
             timeout_ms: 3000,
@@ -77,6 +78,7 @@ mod tests {
     #[test]
     fn webhook_rejects_invalid_header() {
         let config = WebhookConfig {
+            name: None,
             url: "https://hooks.example.com".to_string(),
             headers: HashMap::from([("Invalid\nHeader".to_string(), SecretString::from("value"))]),
             timeout_ms: 5000,

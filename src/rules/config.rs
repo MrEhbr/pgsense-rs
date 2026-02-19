@@ -142,4 +142,6 @@ pub struct RuleConfig {
     pub allowlist: Option<Allowlist>,
     #[serde(default)]
     pub scope: Option<RuleScope>,
+    #[serde(default)]
+    pub channels: Option<Vec<String>>,
 }

@@ -105,6 +105,7 @@ mod tests {
             script: None,
             allowlist: None,
             scope: None,
+            channels: None,
         }]
     }
 

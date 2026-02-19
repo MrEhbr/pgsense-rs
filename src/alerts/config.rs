@@ -34,6 +34,7 @@ impl Default for AlertsConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct PostgresAlertConfig {
+    pub name: Option<String>,
     pub host: String,
     pub port: u16,
     pub dbname: String,
@@ -48,6 +49,7 @@ pub struct PostgresAlertConfig {
 impl Default for PostgresAlertConfig {
     fn default() -> Self {
         Self {
+            name: None,
             host: "localhost".to_string(),
             port: 5432,
             dbname: "postgres".to_string(),
@@ -82,6 +84,7 @@ pub struct StdoutAlertConfig {
 #[serde(default)]
 pub struct JsonlAlertConfig {
     pub enabled: bool,
+    pub name: Option<String>,
     pub path: PathBuf,
 }
 
@@ -89,6 +92,7 @@ impl Default for JsonlAlertConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            name: None,
             path: PathBuf::from("alerts.jsonl"),
         }
     }
@@ -96,6 +100,8 @@ impl Default for JsonlAlertConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WebhookConfig {
+    #[serde(default)]
+    pub name: Option<String>,
     pub url: String,
     #[serde(default, skip_serializing)]
     pub headers: HashMap<String, SecretString>,
@@ -109,6 +115,8 @@ fn default_timeout_ms() -> u64 {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SlackConfig {
+    #[serde(default)]
+    pub name: Option<String>,
     #[serde(skip_serializing)]
     pub token: SecretString,
     pub channel: String,

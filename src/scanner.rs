@@ -32,6 +32,7 @@ pub struct Finding {
     pub value_hash: u64,
     pub primary_keys: Vec<(String, String)>,
     pub lsn: u64,
+    pub channels: Option<Vec<String>>,
 }
 
 static HASHER: LazyLock<RandomState> = LazyLock::new(RandomState::new);
@@ -90,6 +91,7 @@ impl Scanner {
                     value_hash: HASHER.hash_one(&m.matched_text),
                     primary_keys: event.primary_keys.clone(),
                     lsn: event.commit_lsn,
+                    channels: m.rule.channels.clone(),
                 });
             }
         }
@@ -168,6 +170,7 @@ mod tests {
             script: None,
             allowlist: None,
             scope: None,
+            channels: None,
         }];
         let engine = RuleEngine::new(&rules).unwrap();
         Scanner::new(engine, ScanFilter::default())
@@ -212,6 +215,7 @@ mod tests {
             script: None,
             allowlist: None,
             scope: None,
+            channels: None,
         }];
         let engine = RuleEngine::new(&rules).unwrap();
         let scanner = Scanner::new(engine, filter);
@@ -267,6 +271,7 @@ mod tests {
             script: None,
             allowlist: None,
             scope: Some(scope),
+            channels: None,
         }];
         let engine = RuleEngine::new(&rules).unwrap();
         Scanner::new(engine, ScanFilter::default())

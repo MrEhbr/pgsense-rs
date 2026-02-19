@@ -17,6 +17,7 @@ pub struct RuleMetadata {
     pub severity: Severity,
     pub rule_type: RuleType,
     pub scope: Option<RuleScope>,
+    pub channels: Option<Vec<String>>,
 }
 
 pub enum RuleKind {
@@ -85,6 +86,7 @@ impl RuleEngine {
                 severity: c.severity,
                 rule_type: c.rule_type,
                 scope: c.scope.clone(),
+                channels: c.channels.clone(),
             };
 
             let kind = match c.rule_type {
@@ -245,6 +247,7 @@ mod tests {
             script: None,
             allowlist: None,
             scope: None,
+            channels: None,
         }
     }
 

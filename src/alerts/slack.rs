@@ -387,6 +387,7 @@ mod tests {
 
     fn test_config() -> SlackConfig {
         SlackConfig {
+            name: None,
             token: "xoxb-test-token".to_string().into(),
             channel: "#alerts".to_string(),
             username: Some("pgsense-bot".to_string()),

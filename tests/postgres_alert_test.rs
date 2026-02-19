@@ -26,6 +26,7 @@ fn test_finding() -> Finding {
         value_hash: 0,
         primary_keys: vec![("id".to_string(), "1".to_string())],
         lsn: 1,
+        channels: None,
     }
 }
 
@@ -53,6 +54,7 @@ async fn setup() -> TestHarness {
         .expect("failed to get port");
 
     let config = PostgresAlertConfig {
+        name: None,
         host: host.clone(),
         port,
         dbname: "postgres".to_string(),

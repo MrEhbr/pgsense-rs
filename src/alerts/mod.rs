@@ -122,6 +122,7 @@ pub mod testing {
             value_hash: 0,
             primary_keys: vec![("id".to_string(), "1".to_string())],
             lsn: 1,
+            channels: None,
         }
     }
 

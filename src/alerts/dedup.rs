@@ -76,6 +76,7 @@ mod tests {
             value_hash: BuildHasherDefault::<DefaultHasher>::new().hash_one(value),
             primary_keys: vec![],
             lsn: 100,
+            channels: None,
         }
     }
 
