@@ -5,7 +5,7 @@ use regex::{Regex, RegexSet};
 use tracing::debug;
 
 use super::{
-    config::{RuleConfig, RuleType, Severity, Validator},
+    config::{RuleConfig, RuleScope, RuleType, Severity, Validator},
     detectors::Detector,
     script, validators,
 };
@@ -16,6 +16,7 @@ pub struct RuleMetadata {
     pub category: String,
     pub severity: Severity,
     pub rule_type: RuleType,
+    pub scope: Option<RuleScope>,
 }
 
 pub enum RuleKind {
@@ -73,12 +74,17 @@ impl RuleEngine {
         let mut regex_indices: Vec<usize> = Vec::new();
 
         for (i, c) in configs.iter().enumerate() {
+            if let Some(scope) = &c.scope {
+                scope.validate(&c.id)?;
+            }
+
             let meta = RuleMetadata {
                 id: c.id.clone(),
                 description: c.description.clone(),
                 category: c.category.clone(),
                 severity: c.severity,
                 rule_type: c.rule_type,
+                scope: c.scope.clone(),
             };
 
             let kind = match c.rule_type {
@@ -224,7 +230,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::rules::config::{Allowlist, BuiltinKind, Validator};
+    use crate::rules::config::{Allowlist, BuiltinKind, RuleScope, Validator};
 
     fn cfg(id: &str) -> RuleConfig {
         RuleConfig {
@@ -238,6 +244,7 @@ mod tests {
             builtin: None,
             script: None,
             allowlist: None,
+            scope: None,
         }
     }
 
@@ -264,6 +271,42 @@ mod tests {
             }])
             .is_err()
         );
+    }
+
+    #[test]
+    fn scope_table_in_both_include_and_exclude_rejected() {
+        let err = RuleEngine::new(&[RuleConfig {
+            pattern: Some(r"\bfoo\b".into()),
+            scope: Some(RuleScope {
+                include_tables: vec!["users".into()],
+                exclude_tables: vec!["users".into()],
+                ..Default::default()
+            }),
+            ..cfg("bad-scope")
+        }])
+        .err()
+        .expect("should reject conflicting scope");
+        let msg = err.to_string();
+        assert!(msg.contains("users"), "error should name the table: {msg}");
+        assert!(msg.contains("include_tables"), "error should name the field: {msg}");
+    }
+
+    #[test]
+    fn scope_column_in_both_include_and_exclude_rejected() {
+        let err = RuleEngine::new(&[RuleConfig {
+            pattern: Some(r"\bfoo\b".into()),
+            scope: Some(RuleScope {
+                include_columns: vec!["email".into()],
+                exclude_columns: vec!["email".into()],
+                ..Default::default()
+            }),
+            ..cfg("bad-scope")
+        }])
+        .err()
+        .expect("should reject conflicting scope");
+        let msg = err.to_string();
+        assert!(msg.contains("email"), "error should name the column: {msg}");
+        assert!(msg.contains("include_columns"), "error should name the field: {msg}");
     }
 
     // Interleaving builtins must not corrupt the RegexSet→rules[] index mapping.

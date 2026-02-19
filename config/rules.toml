@@ -26,6 +26,14 @@
 #   description — why these are allowed
 #   values      — exact values to skip
 #   patterns    — regex patterns; if any matches, finding is suppressed
+#
+# Scope (optional, restricts where the rule applies):
+#   [rules.scope]
+#   include_schemas  — only scan these schemas (default: all)
+#   include_tables   — only scan these tables (default: all)
+#   exclude_tables   — skip these tables
+#   include_columns  — only scan these columns (default: all)
+#   exclude_columns  — skip these columns
 
 # --- Builtin detectors (algorithmic, no regex needed) ---
 
@@ -74,6 +82,19 @@ builtin = "phone"
 # severity = "critical"
 # pattern = '\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b'
 # validate = "luhn"
+
+# --- Scoped rule example ---
+
+# [[rules]]
+# type = "builtin"
+# id = "ssn-users-only"
+# description = "SSN detection scoped to user-facing tables"
+# category = "PII"
+# severity = "critical"
+# builtin = "ssn"
+# [rules.scope]
+# include_tables = ["users", "employees"]
+# exclude_columns = ["ssn_hash"]
 
 # --- Rhai script rules ---
 

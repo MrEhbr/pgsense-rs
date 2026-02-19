@@ -37,6 +37,7 @@ PostgreSQL WAL → etl Pipeline → Scanner → Rule Engine → Alert Dispatcher
 - **Health endpoints** — `/health`, `/ready`, `/metrics` via configurable HTTP server
 - **Column-type filtering** — Automatically skips non-text column types
 - **Persistent checkpointing** — Memory (default), SQLite, or PostgreSQL-backed LSN store for crash recovery
+- **Per-rule scope** — Restrict rules to specific schemas, tables, or columns via include/exclude lists
 - **Allowlists** — Per-rule value and pattern allowlists to reduce false positives
 - **Value masking** — Matched values are masked in alert output
 
@@ -111,7 +112,7 @@ category = "CUSTOM"
 severity = "medium"
 ```
 
-Rules support `validate` (Luhn/SSN checksum), allowlists (exact values + patterns), and all standard fields. See [`config/rules.toml`](config/rules.toml) for the complete reference.
+Rules support `validate` (Luhn/SSN checksum), `allowlist` (exact values + patterns), `scope` (restrict to specific tables/columns), and all standard fields. See [`config/rules.toml`](config/rules.toml) for the complete reference.
 
 ## CLI
 

@@ -1,5 +1,6 @@
 use std::{fmt, path::PathBuf};
 
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -68,6 +69,59 @@ pub enum BuiltinKind {
     Ssn,
 }
 
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct RuleScope {
+    pub include_schemas: Vec<String>,
+    pub include_tables: Vec<String>,
+    pub exclude_tables: Vec<String>,
+    pub include_columns: Vec<String>,
+    pub exclude_columns: Vec<String>,
+}
+
+impl RuleScope {
+    pub fn validate(&self, rule_id: &str) -> Result<()> {
+        for t in &self.include_tables {
+            if self.exclude_tables.contains(t) {
+                bail!("rule '{rule_id}': table '{t}' appears in both include_tables and exclude_tables");
+            }
+        }
+        for c in &self.include_columns {
+            if self.exclude_columns.contains(c) {
+                bail!("rule '{rule_id}': column '{c}' appears in both include_columns and exclude_columns");
+            }
+        }
+        Ok(())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.include_schemas.is_empty()
+            && self.include_tables.is_empty()
+            && self.exclude_tables.is_empty()
+            && self.include_columns.is_empty()
+            && self.exclude_columns.is_empty()
+    }
+
+    pub fn matches(&self, schema: &str, table: &str, column: &str) -> bool {
+        if !self.include_schemas.is_empty() && !self.include_schemas.iter().any(|s| s == schema) {
+            return false;
+        }
+        if !self.include_tables.is_empty() && !self.include_tables.iter().any(|t| t == table) {
+            return false;
+        }
+        if self.exclude_tables.iter().any(|t| t == table) {
+            return false;
+        }
+        if !self.include_columns.is_empty() && !self.include_columns.iter().any(|c| c == column) {
+            return false;
+        }
+        if self.exclude_columns.iter().any(|c| c == column) {
+            return false;
+        }
+        true
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RuleConfig {
     pub id: String,
@@ -86,4 +140,6 @@ pub struct RuleConfig {
     pub script: Option<PathBuf>,
     #[serde(default)]
     pub allowlist: Option<Allowlist>,
+    #[serde(default)]
+    pub scope: Option<RuleScope>,
 }

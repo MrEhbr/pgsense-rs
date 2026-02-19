@@ -104,6 +104,7 @@ mod tests {
             builtin: None,
             script: None,
             allowlist: None,
+            scope: None,
         }]
     }
 

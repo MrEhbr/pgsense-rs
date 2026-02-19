@@ -26,6 +26,7 @@ fn noop_rule() -> Vec<RuleConfig> {
         builtin: None,
         script: None,
         allowlist: None,
+        scope: None,
     }]
 }
 

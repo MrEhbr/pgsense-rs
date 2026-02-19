@@ -72,6 +72,12 @@ impl Scanner {
             };
 
             for m in self.engine.scan_value(value) {
+                if let Some(scope) = &m.rule.scope
+                    && !scope.matches(&event.schema_name, &event.table_name, &col.name)
+                {
+                    continue;
+                }
+
                 findings.push(Finding {
                     rule_id: m.rule.id.clone(),
                     description: m.rule.description.clone(),
@@ -114,7 +120,7 @@ mod tests {
     use super::*;
     use crate::{
         events::{Action, ColumnValue, ScanEvent},
-        rules::config::{RuleConfig, RuleType, Severity},
+        rules::config::{RuleConfig, RuleScope, RuleType, Severity},
     };
 
     const MATCH: &str = "ALPHA-1";
@@ -161,6 +167,7 @@ mod tests {
             builtin: None,
             script: None,
             allowlist: None,
+            scope: None,
         }];
         let engine = RuleEngine::new(&rules).unwrap();
         Scanner::new(engine, ScanFilter::default())
@@ -204,6 +211,7 @@ mod tests {
             builtin: None,
             script: None,
             allowlist: None,
+            scope: None,
         }];
         let engine = RuleEngine::new(&rules).unwrap();
         let scanner = Scanner::new(engine, filter);
@@ -244,5 +252,66 @@ mod tests {
         let findings = scanner.scan(&event);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].primary_keys, vec![("id".to_string(), "1".to_string())]);
+    }
+
+    fn scanner_with_scope(scope: RuleScope) -> Scanner {
+        let rules = vec![RuleConfig {
+            id: "rule-alpha".into(),
+            description: "Matches ALPHA marker".into(),
+            category: "CAT_A".into(),
+            severity: Severity::Critical,
+            rule_type: RuleType::Regex,
+            pattern: Some(r"ALPHA-\d+".into()),
+            validate: None,
+            builtin: None,
+            script: None,
+            allowlist: None,
+            scope: Some(scope),
+        }];
+        let engine = RuleEngine::new(&rules).unwrap();
+        Scanner::new(engine, ScanFilter::default())
+    }
+
+    #[rstest::rstest]
+    #[case("include_table_match", RuleScope { include_tables: vec!["t1".into()], ..Default::default() }, true)]
+    #[case("include_table_miss", RuleScope { include_tables: vec!["other".into()], ..Default::default() }, false)]
+    #[case("exclude_table_match", RuleScope { exclude_tables: vec!["t1".into()], ..Default::default() }, false)]
+    #[case("exclude_table_miss", RuleScope { exclude_tables: vec!["other".into()], ..Default::default() }, true)]
+    #[case("include_schema_match", RuleScope { include_schemas: vec!["public".into()], ..Default::default() }, true)]
+    #[case("include_schema_miss", RuleScope { include_schemas: vec!["private".into()], ..Default::default() }, false)]
+    #[case("include_column_match", RuleScope { include_columns: vec!["c1".into()], ..Default::default() }, true)]
+    #[case("include_column_miss", RuleScope { include_columns: vec!["c2".into()], ..Default::default() }, false)]
+    #[case("exclude_column_match", RuleScope { exclude_columns: vec!["c1".into()], ..Default::default() }, false)]
+    #[case("exclude_column_miss", RuleScope { exclude_columns: vec!["other".into()], ..Default::default() }, true)]
+    fn rule_scope_filtering(#[case] _label: &str, #[case] scope: RuleScope, #[case] expect_finding: bool) {
+        let scanner = scanner_with_scope(scope);
+        let event = test_event(vec![col("c1", Some(MATCH))]);
+        let findings = scanner.scan(&event);
+        assert_eq!(!findings.is_empty(), expect_finding, "expected finding={expect_finding}");
+    }
+
+    #[test]
+    fn scope_empty_means_no_restriction() {
+        let scanner = scanner_with_scope(RuleScope::default());
+        let event = test_event(vec![col("c1", Some(MATCH))]);
+        assert_eq!(scanner.scan(&event).len(), 1);
+    }
+
+    #[test]
+    fn scope_combined_include_and_exclude() {
+        let scope = RuleScope {
+            include_tables: vec!["t1".into()],
+            exclude_columns: vec!["c1".into()],
+            ..Default::default()
+        };
+        let scanner = scanner_with_scope(scope);
+
+        // c1 excluded by scope even though table matches
+        let event = test_event(vec![col("c1", Some(MATCH))]);
+        assert!(scanner.scan(&event).is_empty());
+
+        // c2 not excluded, table matches
+        let event = test_event(vec![col("c2", Some(MATCH))]);
+        assert_eq!(scanner.scan(&event).len(), 1);
     }
 }
