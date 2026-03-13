@@ -76,10 +76,6 @@ impl SqliteStore {
     }
 }
 
-// ---------------------------------------------------------------------------
-// StateStore
-// ---------------------------------------------------------------------------
-
 impl StateStore for SqliteStore {
     async fn get_table_replication_state(&self, table_id: TableId) -> EtlResult<Option<TableReplicationPhase>> {
         let inner = self.inner.lock().await;
@@ -178,10 +174,6 @@ impl StateStore for SqliteStore {
     }
 }
 
-// ---------------------------------------------------------------------------
-// SchemaStore
-// ---------------------------------------------------------------------------
-
 impl SchemaStore for SqliteStore {
     async fn get_table_schema(&self, table_id: &TableId) -> EtlResult<Option<Arc<TableSchema>>> {
         let inner = self.inner.lock().await;
@@ -222,10 +214,6 @@ impl SchemaStore for SqliteStore {
         Ok(())
     }
 }
-
-// ---------------------------------------------------------------------------
-// CleanupStore
-// ---------------------------------------------------------------------------
 
 impl CleanupStore for SqliteStore {
     async fn cleanup_table_state(&self, table_id: TableId) -> EtlResult<()> {

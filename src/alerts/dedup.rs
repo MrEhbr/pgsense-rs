@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    sync::Mutex,
     time::{Duration, Instant},
 };
 
@@ -9,6 +10,7 @@ const PRUNE_THRESHOLD: usize = 10_000;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct DedupKey {
+    database: String,
     schema_name: String,
     table_name: String,
     column_name: String,
@@ -20,23 +22,28 @@ struct DedupKey {
 /// value) within a time window. Uses a hash of the original matched text
 /// so different values always produce distinct keys regardless of masking.
 pub struct Deduplicator {
-    seen: HashMap<DedupKey, Instant>,
+    seen: Mutex<HashMap<DedupKey, Instant>>,
     window: Duration,
 }
 
 impl Deduplicator {
     pub fn new(window: Duration) -> Self {
-        Self { seen: HashMap::new(), window }
+        Self {
+            seen: Mutex::new(HashMap::new()),
+            window,
+        }
     }
 
-    pub fn should_alert(&mut self, finding: &Finding) -> bool {
-        if self.seen.len() > PRUNE_THRESHOLD {
+    pub fn should_alert(&self, finding: &Finding) -> bool {
+        let mut seen = self.seen.lock().unwrap();
+
+        if seen.len() > PRUNE_THRESHOLD {
             let now = Instant::now();
-            self.seen
-                .retain(|_, last| now.duration_since(*last) < self.window);
+            seen.retain(|_, last| now.duration_since(*last) < self.window);
         }
 
         let key = DedupKey {
+            database: finding.database.clone(),
             schema_name: finding.schema_name.clone(),
             table_name: finding.table_name.clone(),
             column_name: finding.column_name.clone(),
@@ -45,10 +52,10 @@ impl Deduplicator {
         };
         let now = Instant::now();
 
-        match self.seen.get(&key) {
+        match seen.get(&key) {
             Some(last) if now.duration_since(*last) < self.window => false,
             _ => {
-                self.seen.insert(key, now);
+                seen.insert(key, now);
                 true
             },
         }
@@ -65,6 +72,7 @@ mod tests {
     fn test_finding(schema: &str, table: &str, column: &str, rule_id: &str, value: &str) -> Finding {
         use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
         Finding {
+            database: "localhost/testdb".to_string(),
             rule_id: rule_id.to_string(),
             description: "test".to_string(),
             category: "TEST".to_string(),
@@ -82,7 +90,7 @@ mod tests {
 
     #[test]
     fn duplicate_suppressed_within_window() {
-        let mut dedup = Deduplicator::new(Duration::from_secs(300));
+        let dedup = Deduplicator::new(Duration::from_secs(300));
         let finding = test_finding("public", "data", "col1", "rule1", "foo");
 
         assert!(dedup.should_alert(&finding));
@@ -108,7 +116,7 @@ mod tests {
         ("private", "data", "col1", "rule1", "foo"),
     )]
     fn distinct_keys_not_suppressed(#[case] a: (&str, &str, &str, &str, &str), #[case] b: (&str, &str, &str, &str, &str)) {
-        let mut dedup = Deduplicator::new(Duration::from_secs(300));
+        let dedup = Deduplicator::new(Duration::from_secs(300));
 
         assert!(dedup.should_alert(&test_finding(a.0, a.1, a.2, a.3, a.4)));
         assert!(dedup.should_alert(&test_finding(b.0, b.1, b.2, b.3, b.4)));
@@ -116,7 +124,7 @@ mod tests {
 
     #[test]
     fn expired_entries_allow_re_alert() {
-        let mut dedup = Deduplicator::new(Duration::from_millis(1));
+        let dedup = Deduplicator::new(Duration::from_millis(1));
         let finding = test_finding("public", "data", "col1", "rule1", "foo");
 
         assert!(dedup.should_alert(&finding));

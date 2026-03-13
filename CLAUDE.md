@@ -18,16 +18,23 @@ just run scan -c config/app.toml  # Run the scanner
 **lib+bin crate** — `src/lib.rs` re-exports modules, `src/main.rs` is a thin async entry point.
 
 ```
-Pipeline (supabase/etl) → ScannerDestination → mpsc → Scanner → Dispatcher → AlertChannels
+[[databases]][0] → PipelineRunner → ScannerDestination("host1/db") → ─┐
+[[databases]][1] → PipelineRunner → ScannerDestination("host2/db") → ─┤
+                                                                       │
+                                               merged mpsc channel ◄──┘
+                                                       │
+                                                 Scanner::scan(event, filter)
+                                                       │
+                                               Dispatcher → AlertChannels
 ```
 
 Key modules:
-- `pipeline/` — etl integration, `PipelineRunner` with `MemoryStore`/`PostgresStore` backends
+- `pipeline/` — etl integration, `PipelineRunner` (one per database) with `MemoryStore`/`PostgresStore`/`SqliteStore` backends; `DatabaseConfig` for per-database connection + optional scan filter
 - `rules/` — `RuleEngine` (RegexSet fast path), validators (Luhn, SSN), builtin rules, masking
-- `scanner.rs` — scans events against rules, skips non-text column types
-- `alerts/` — enum dispatch (`Log`/`Stdout`/`Webhook`), deduplication, dispatcher
+- `scanner.rs` — `Scanner::scan(event, filter)` takes explicit filter (per-db override); skips non-text column types
+- `alerts/` — enum dispatch (`Log`/`Stdout`/`Webhook`/`Slack`/`Postgres`), deduplication (keyed by database+schema+table+col+rule+value), dispatcher
 - `commands/` — CLI: `rules`, `scan`
-- `metrics.rs` / `server.rs` — Prometheus metrics, axum health endpoints
+- `metrics.rs` / `server.rs` — Prometheus metrics (labels include `database`), axum health endpoints
 
 ## Conventions
 

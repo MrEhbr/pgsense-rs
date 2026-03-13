@@ -50,6 +50,7 @@ pub struct ColumnValue {
 
 #[derive(Debug, Clone)]
 pub struct ScanEvent {
+    pub database: String,
     pub table_id: TableId,
     pub schema_name: String,
     pub table_name: String,
@@ -175,8 +176,9 @@ fn extract_columns(row: &TableRow, meta: &TableMeta) -> Vec<ColumnValue> {
         .collect()
 }
 
-pub fn from_insert(event: &InsertEvent, meta: &TableMeta) -> ScanEvent {
+pub fn from_insert(event: &InsertEvent, meta: &TableMeta, database: &str) -> ScanEvent {
     ScanEvent {
+        database: database.to_string(),
         table_id: event.table_id,
         schema_name: meta.schema.clone(),
         table_name: meta.name.clone(),
@@ -188,8 +190,9 @@ pub fn from_insert(event: &InsertEvent, meta: &TableMeta) -> ScanEvent {
     }
 }
 
-pub fn from_update(event: &UpdateEvent, meta: &TableMeta) -> ScanEvent {
+pub fn from_update(event: &UpdateEvent, meta: &TableMeta, database: &str) -> ScanEvent {
     ScanEvent {
+        database: database.to_string(),
         table_id: event.table_id,
         schema_name: meta.schema.clone(),
         table_name: meta.name.clone(),
@@ -201,19 +204,19 @@ pub fn from_update(event: &UpdateEvent, meta: &TableMeta) -> ScanEvent {
     }
 }
 
-pub fn extract_scan_events(events: &[Event], table_registry: &std::collections::HashMap<TableId, TableMeta>) -> Vec<ScanEvent> {
+pub fn extract_scan_events(events: &[Event], table_registry: &std::collections::HashMap<TableId, TableMeta>, database: &str) -> Vec<ScanEvent> {
     let mut scan_events = Vec::new();
 
     for event in events {
         match event {
             Event::Insert(e) => {
                 if let Some(meta) = table_registry.get(&e.table_id) {
-                    scan_events.push(from_insert(e, meta));
+                    scan_events.push(from_insert(e, meta, database));
                 }
             },
             Event::Update(e) => {
                 if let Some(meta) = table_registry.get(&e.table_id) {
-                    scan_events.push(from_update(e, meta));
+                    scan_events.push(from_update(e, meta, database));
                 }
             },
             _ => {},

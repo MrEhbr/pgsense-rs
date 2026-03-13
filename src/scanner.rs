@@ -17,8 +17,23 @@ pub struct ScanFilter {
     pub exclude_columns: Vec<String>,
 }
 
+impl ScanFilter {
+    pub fn matches_schema(&self, schema: &str) -> bool {
+        self.include_schemas.is_empty() || self.include_schemas.iter().any(|s| s == schema)
+    }
+
+    pub fn matches_table(&self, table: &str) -> bool {
+        !self.exclude_tables.iter().any(|t| t == table)
+    }
+
+    pub fn should_include_column(&self, column: &str) -> bool {
+        !self.exclude_columns.iter().any(|c| c == column)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Finding {
+    pub database: String,
     pub rule_id: String,
     pub description: String,
     pub category: String,
@@ -39,30 +54,17 @@ static HASHER: LazyLock<RandomState> = LazyLock::new(RandomState::new);
 
 pub struct Scanner {
     engine: RuleEngine,
-    filter: ScanFilter,
 }
 
 impl Scanner {
-    pub fn new(engine: RuleEngine, filter: ScanFilter) -> Self {
-        Self { engine, filter }
+    pub fn new(engine: RuleEngine) -> Self {
+        Self { engine }
     }
 
     pub fn scan(&self, event: &ScanEvent) -> Vec<Finding> {
-        if !self.filter.include_schemas.is_empty() && !self.filter.include_schemas.contains(&event.schema_name) {
-            return Vec::new();
-        }
-
-        if self.filter.exclude_tables.contains(&event.table_name) {
-            return Vec::new();
-        }
-
         let mut findings = Vec::new();
 
         for col in &event.columns {
-            if self.filter.exclude_columns.contains(&col.name) {
-                continue;
-            }
-
             if !is_scannable_type(&col.type_name) {
                 continue;
             }
@@ -80,6 +82,7 @@ impl Scanner {
                 }
 
                 findings.push(Finding {
+                    database: event.database.clone(),
                     rule_id: m.rule.id.clone(),
                     description: m.rule.description.clone(),
                     category: m.rule.category.clone(),
@@ -130,6 +133,7 @@ mod tests {
 
     fn test_event(columns: Vec<ColumnValue>) -> ScanEvent {
         ScanEvent {
+            database: "localhost/testdb".to_string(),
             table_id: TableId(1),
             schema_name: "public".to_string(),
             table_name: "t1".to_string(),
@@ -173,7 +177,7 @@ mod tests {
             channels: None,
         }];
         let engine = RuleEngine::new(&rules).unwrap();
-        Scanner::new(engine, ScanFilter::default())
+        Scanner::new(engine)
     }
 
     #[test]
@@ -199,29 +203,23 @@ mod tests {
     }
 
     #[rstest::rstest]
-    #[case("schema", ScanFilter { include_schemas: vec!["other".into()], ..Default::default() })]
-    #[case("table", ScanFilter { exclude_tables: vec!["t1".into()], ..Default::default() })]
-    #[case("column", ScanFilter { exclude_columns: vec!["c1".into()], ..Default::default() })]
-    fn filter_excludes(#[case] _label: &str, #[case] filter: ScanFilter) {
-        let rules = vec![RuleConfig {
-            id: "rule-alpha".into(),
-            description: "Matches ALPHA marker".into(),
-            category: "CAT_A".into(),
-            severity: Severity::Critical,
-            rule_type: RuleType::Regex,
-            pattern: Some(r"ALPHA-\d+".into()),
-            validate: None,
-            builtin: None,
-            script: None,
-            allowlist: None,
-            scope: None,
-            channels: None,
-        }];
-        let engine = RuleEngine::new(&rules).unwrap();
-        let scanner = Scanner::new(engine, filter);
+    #[case("schema_miss", ScanFilter { include_schemas: vec!["other".into()], ..Default::default() }, false)]
+    #[case("schema_hit", ScanFilter { include_schemas: vec!["public".into()], ..Default::default() }, true)]
+    #[case("schema_empty", ScanFilter::default(), true)]
+    #[case("table_excluded", ScanFilter { exclude_tables: vec!["t1".into()], ..Default::default() }, false)]
+    #[case("table_not_excluded", ScanFilter { exclude_tables: vec!["other".into()], ..Default::default() }, true)]
+    fn filter_matches_event(#[case] _label: &str, #[case] filter: ScanFilter, #[case] expected: bool) {
+        assert_eq!(filter.matches_schema("public") && filter.matches_table("t1"), expected);
+    }
 
-        let event = test_event(vec![col("c1", Some(MATCH))]);
-        assert!(scanner.scan(&event).is_empty());
+    #[test]
+    fn filter_excludes_column() {
+        let filter = ScanFilter {
+            exclude_columns: vec!["c1".into()],
+            ..Default::default()
+        };
+        assert!(!filter.should_include_column("c1"));
+        assert!(filter.should_include_column("c2"));
     }
 
     #[test]
@@ -274,7 +272,7 @@ mod tests {
             channels: None,
         }];
         let engine = RuleEngine::new(&rules).unwrap();
-        Scanner::new(engine, ScanFilter::default())
+        Scanner::new(engine)
     }
 
     #[rstest::rstest]

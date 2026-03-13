@@ -14,6 +14,7 @@ fn format_primary_keys(pks: &[(String, String)]) -> String {
 macro_rules! emit_finding {
     ($level:ident, $finding:expr, $pk:expr) => {
         tracing::$level!(
+            database = %$finding.database,
             rule_id = %$finding.rule_id,
             category = %$finding.category,
             severity = %$finding.severity,

@@ -1,20 +1,19 @@
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{Context, Result};
-use etl::{pipeline::Pipeline, store::both::memory::MemoryStore};
-use tokio::sync::{RwLock, mpsc, oneshot};
+use etl::{config::PgConnectionConfig, pipeline::Pipeline, store::both::memory::MemoryStore};
+use tokio::sync::{RwLock, mpsc};
 use tracing::info;
 
 use crate::{
     events::ScanEvent,
     pipeline::{
-        config::{PipelineSettings, PostgresConfig, StoreType},
+        config::{PipelineSettings, StoreType},
         destination::{ScannerDestination, TableRegistry},
         store::{PostgresStore, SqliteStore},
     },
+    scanner::ScanFilter,
 };
-
-const EVENT_CHANNEL_SIZE: usize = 1024;
 
 enum PipelineInner {
     Memory(Pipeline<MemoryStore, ScannerDestination>),
@@ -22,24 +21,96 @@ enum PipelineInner {
     Sqlite(Pipeline<SqliteStore, ScannerDestination>),
 }
 
+macro_rules! dispatch {
+    ($pipeline:expr, $method:ident) => {
+        match $pipeline {
+            PipelineInner::Memory(p) => p.$method(),
+            PipelineInner::Postgres(p) => p.$method(),
+            PipelineInner::Sqlite(p) => p.$method(),
+        }
+    };
+    (await $pipeline:expr, $method:ident) => {
+        match $pipeline {
+            PipelineInner::Memory(p) => p.$method().await,
+            PipelineInner::Postgres(p) => p.$method().await,
+            PipelineInner::Sqlite(p) => p.$method().await,
+        }
+    };
+}
+
+impl PipelineInner {
+    async fn start(&mut self) -> Result<()> {
+        dispatch!(await self, start).map_err(|e| anyhow::anyhow!("pipeline start failed: {e}"))
+    }
+
+    async fn wait(self) -> Result<()> {
+        dispatch!(await self, wait).map_err(|e| anyhow::anyhow!("pipeline error: {e}"))
+    }
+
+    fn shutdown(&self) {
+        dispatch!(self, shutdown);
+    }
+
+    async fn shutdown_and_wait(self) -> Result<()> {
+        dispatch!(await self, shutdown_and_wait).map_err(|e| anyhow::anyhow!("pipeline shutdown failed: {e}"))
+    }
+}
+
 pub struct PipelineRunner {
     pipeline: Option<PipelineInner>,
-    event_rx: Option<mpsc::Receiver<Vec<ScanEvent>>>,
     table_registry: TableRegistry,
+    // Stored for reconnection
+    pipeline_id: u64,
+    database: String,
+    scan_filter: ScanFilter,
+    pg_connection: PgConnectionConfig,
+    publication: String,
+    settings: PipelineSettings,
+    event_tx: mpsc::Sender<Vec<ScanEvent>>,
 }
 
 impl PipelineRunner {
-    pub async fn new(pipeline_id: u64, postgres_config: &PostgresConfig, pipeline_settings: &PipelineSettings) -> Result<Self> {
-        let pg_connection = postgres_config.to_pg_connection_config();
-        let pipeline_config = pipeline_settings
-            .to_pipeline_config(pipeline_id, &postgres_config.publication, pg_connection.clone())
+    pub async fn new(
+        pipeline_id: u64,
+        db: &crate::pipeline::config::DatabaseConfig,
+        pipeline_settings: &PipelineSettings,
+        event_tx: mpsc::Sender<Vec<ScanEvent>>,
+    ) -> Result<Self> {
+        let database = db.database_id();
+        let scan_filter = db.scan.clone().unwrap_or_default();
+        let pg_connection = db.to_pg_connection_config();
+        let table_registry: TableRegistry = Arc::new(RwLock::new(HashMap::new()));
+
+        let mut runner = Self {
+            pipeline: None,
+            table_registry,
+            pipeline_id,
+            database,
+            scan_filter,
+            pg_connection,
+            publication: db.publication.clone(),
+            settings: pipeline_settings.clone(),
+            event_tx,
+        };
+
+        runner.build_pipeline().await?;
+        Ok(runner)
+    }
+
+    async fn build_pipeline(&mut self) -> Result<()> {
+        let pipeline_config = self
+            .settings
+            .to_pipeline_config(self.pipeline_id, &self.publication, self.pg_connection.clone())
             .context("failed to build pipeline config")?;
 
-        let table_registry: TableRegistry = Arc::new(RwLock::new(HashMap::new()));
-        let (event_tx, event_rx) = mpsc::channel(EVENT_CHANNEL_SIZE);
-        let destination = ScannerDestination::new(event_tx, table_registry.clone());
+        let destination = ScannerDestination::new(
+            self.database.clone(),
+            self.scan_filter.clone(),
+            self.event_tx.clone(),
+            self.table_registry.clone(),
+        );
 
-        let pipeline = match &pipeline_settings.store {
+        let pipeline = match &self.settings.store {
             StoreType::Memory => {
                 info!("using in-memory store (state lost on restart)");
                 let store = MemoryStore::new();
@@ -47,122 +118,60 @@ impl PipelineRunner {
             },
             StoreType::Postgres(pg_store_config) => {
                 info!(schema = %pg_store_config.schema, "using PostgreSQL store (persistent state)");
-                let store = PostgresStore::new(pipeline_id, pg_store_config)
+                let store = PostgresStore::new(self.pipeline_id, pg_store_config)
                     .await
                     .map_err(|e| anyhow::anyhow!("Postgres store init failed: {e}"))?;
                 PipelineInner::Postgres(Pipeline::new(pipeline_config, store, destination))
             },
             StoreType::Sqlite(sqlite_config) => {
                 info!(path = %sqlite_config.path, "using SQLite store (persistent local file)");
-                let store = SqliteStore::new(pipeline_id, &sqlite_config.path)
+                let store = SqliteStore::new(self.pipeline_id, &sqlite_config.path)
                     .await
                     .map_err(|e| anyhow::anyhow!("SQLite store init failed: {e}"))?;
                 PipelineInner::Sqlite(Pipeline::new(pipeline_config, store, destination))
             },
         };
 
-        Ok(Self {
-            pipeline: Some(pipeline),
-            event_rx: Some(event_rx),
-            table_registry,
-        })
+        self.pipeline = Some(pipeline);
+        Ok(())
     }
 
-    /// Connects to PostgreSQL and begins replication streaming.
     pub async fn start(&mut self) -> Result<()> {
         let pipeline = self
             .pipeline
             .as_mut()
             .context("pipeline already consumed")?;
         info!("starting replication pipeline");
-        match pipeline {
-            PipelineInner::Memory(p) => p
-                .start()
-                .await
-                .map_err(|e| anyhow::anyhow!("pipeline start failed: {e}"))?,
-            PipelineInner::Postgres(p) => p
-                .start()
-                .await
-                .map_err(|e| anyhow::anyhow!("pipeline start failed: {e}"))?,
-            PipelineInner::Sqlite(p) => p
-                .start()
-                .await
-                .map_err(|e| anyhow::anyhow!("pipeline start failed: {e}"))?,
-        }
+        pipeline.start().await?;
         info!("replication pipeline started");
         Ok(())
     }
 
-    /// Wait for the pipeline to complete (consumes the pipeline).
-    pub async fn wait(mut self) -> Result<()> {
+    /// Wait for the pipeline to complete. After wait returns, the runner can
+    /// be reconnected via [`reconnect`].
+    pub async fn wait(&mut self) -> Result<()> {
         let pipeline = self.pipeline.take().context("pipeline already consumed")?;
-        match pipeline {
-            PipelineInner::Memory(p) => p
-                .wait()
-                .await
-                .map_err(|e| anyhow::anyhow!("pipeline error: {e}"))?,
-            PipelineInner::Postgres(p) => p
-                .wait()
-                .await
-                .map_err(|e| anyhow::anyhow!("pipeline error: {e}"))?,
-            PipelineInner::Sqlite(p) => p
-                .wait()
-                .await
-                .map_err(|e| anyhow::anyhow!("pipeline error: {e}"))?,
+        pipeline.wait().await
+    }
+
+    /// Rebuild the pipeline from stored params and start it.
+    pub async fn reconnect(&mut self) -> Result<()> {
+        self.build_pipeline().await?;
+        self.start().await
+    }
+
+    /// Signal the pipeline to stop gracefully. Non-consuming — the running
+    /// `wait()` call will return once workers finish.
+    pub fn signal_shutdown(&self) {
+        if let Some(pipeline) = &self.pipeline {
+            pipeline.shutdown();
         }
-        Ok(())
     }
 
     /// Gracefully shut down the pipeline and wait for all workers to finish.
     pub async fn shutdown(mut self) -> Result<()> {
         let pipeline = self.pipeline.take().context("pipeline already consumed")?;
-        match pipeline {
-            PipelineInner::Memory(p) => p
-                .shutdown_and_wait()
-                .await
-                .map_err(|e| anyhow::anyhow!("pipeline shutdown failed: {e}"))?,
-            PipelineInner::Postgres(p) => p
-                .shutdown_and_wait()
-                .await
-                .map_err(|e| anyhow::anyhow!("pipeline shutdown failed: {e}"))?,
-            PipelineInner::Sqlite(p) => p
-                .shutdown_and_wait()
-                .await
-                .map_err(|e| anyhow::anyhow!("pipeline shutdown failed: {e}"))?,
-        }
-        Ok(())
-    }
-
-    /// Spawn a background task that waits for the pipeline to finish.
-    /// Returns a oneshot receiver that resolves when the pipeline exits
-    /// (either normally or due to a connection error).
-    /// Must be called after `start()`.
-    pub fn spawn_wait(&mut self) -> Option<oneshot::Receiver<Result<()>>> {
-        let pipeline = self.pipeline.take()?;
-        let (tx, rx) = oneshot::channel();
-        tokio::spawn(async move {
-            let result = match pipeline {
-                PipelineInner::Memory(p) => p
-                    .wait()
-                    .await
-                    .map_err(|e| anyhow::anyhow!("pipeline error: {e}")),
-                PipelineInner::Postgres(p) => p
-                    .wait()
-                    .await
-                    .map_err(|e| anyhow::anyhow!("pipeline error: {e}")),
-                PipelineInner::Sqlite(p) => p
-                    .wait()
-                    .await
-                    .map_err(|e| anyhow::anyhow!("pipeline error: {e}")),
-            };
-            let _ = tx.send(result);
-        });
-        Some(rx)
-    }
-
-    /// Can only be called once.
-    pub fn take_event_receiver(&mut self) -> Option<mpsc::Receiver<Vec<ScanEvent>>> {
-        self.event_rx.take()
+        pipeline.shutdown_and_wait().await
     }
 
     pub fn table_registry(&self) -> &TableRegistry {

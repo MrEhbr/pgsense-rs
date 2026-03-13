@@ -65,6 +65,7 @@ impl PostgresChannel {
         let create_table = format!(
             r#"CREATE TABLE IF NOT EXISTS "{schema}"."{table}" (
                 id BIGSERIAL PRIMARY KEY,
+                database TEXT NOT NULL,
                 rule_id TEXT NOT NULL,
                 description TEXT NOT NULL,
                 category TEXT NOT NULL,
@@ -98,12 +99,13 @@ impl PostgresChannel {
             .into();
 
         let query = format!(
-            r#"INSERT INTO {} (rule_id, description, category, severity, schema_name, table_name, column_name, masked_sample, primary_key, lsn)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"#,
+            r#"INSERT INTO {} (database, rule_id, description, category, severity, schema_name, table_name, column_name, masked_sample, primary_key, lsn)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"#,
             self.table_fqn,
         );
 
         sqlx::query(&query)
+            .bind(&finding.database)
             .bind(&finding.rule_id)
             .bind(&finding.description)
             .bind(&finding.category)

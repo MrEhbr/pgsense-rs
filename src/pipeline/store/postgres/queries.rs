@@ -16,10 +16,7 @@ use sqlx::{PgExecutor, PgPool, Row, postgres::types::Oid as SqlxTableId};
 
 use super::types::TableReplicationStateRow;
 
-// ---------------------------------------------------------------------------
-// State queries (from etl-postgres/src/replication/state.rs)
-// ---------------------------------------------------------------------------
-
+// Adapted from etl-postgres/src/replication/state.rs
 pub async fn get_table_replication_state_rows(pool: &PgPool, pipeline_id: i64) -> EtlResult<Vec<TableReplicationStateRow>> {
     let rows: Vec<TableReplicationStateRow> = sqlx::query_as(
         r#"
@@ -153,10 +150,7 @@ where
     Ok(result.rows_affected())
 }
 
-// ---------------------------------------------------------------------------
-// Schema queries (from etl-postgres/src/replication/schema.rs)
-// ---------------------------------------------------------------------------
-
+// Adapted from etl-postgres/src/replication/schema.rs
 pub async fn store_table_schema(pool: &PgPool, pipeline_id: i64, table_schema: &TableSchema) -> EtlResult<()> {
     let mut tx = pool.begin().await?;
 
@@ -281,10 +275,7 @@ where
     Ok(result.rows_affected())
 }
 
-// ---------------------------------------------------------------------------
-// Table mapping queries (from etl-postgres/src/replication/table_mappings.rs)
-// ---------------------------------------------------------------------------
-
+// Adapted from etl-postgres/src/replication/table_mappings.rs
 pub async fn store_table_mapping(pool: &PgPool, pipeline_id: i64, source_table_id: TableId, destination_table_id: &str) -> EtlResult<()> {
     sqlx::query(
         r#"

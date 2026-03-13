@@ -117,10 +117,6 @@ impl PostgresStore {
     }
 }
 
-// ---------------------------------------------------------------------------
-// StateStore
-// ---------------------------------------------------------------------------
-
 impl StateStore for PostgresStore {
     async fn get_table_replication_state(&self, table_id: TableId) -> EtlResult<Option<TableReplicationPhase>> {
         let inner = self.inner.lock().await;
@@ -221,10 +217,6 @@ impl StateStore for PostgresStore {
     }
 }
 
-// ---------------------------------------------------------------------------
-// SchemaStore
-// ---------------------------------------------------------------------------
-
 impl SchemaStore for PostgresStore {
     async fn get_table_schema(&self, table_id: &TableId) -> EtlResult<Option<Arc<TableSchema>>> {
         let inner = self.inner.lock().await;
@@ -263,10 +255,6 @@ impl SchemaStore for PostgresStore {
         Ok(())
     }
 }
-
-// ---------------------------------------------------------------------------
-// CleanupStore
-// ---------------------------------------------------------------------------
 
 impl CleanupStore for PostgresStore {
     async fn cleanup_table_state(&self, table_id: TableId) -> EtlResult<()> {

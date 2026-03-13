@@ -1,3 +1,5 @@
+mod support;
+
 use std::time::Duration;
 
 use pgsense_rs::{
@@ -8,13 +10,11 @@ use pgsense_rs::{
 };
 use secrecy::SecretString;
 use sqlx::{PgPool, postgres::PgConnectOptions};
-use testcontainers_modules::{
-    postgres::Postgres,
-    testcontainers::{ImageExt, runners::AsyncRunner},
-};
+use support::PgContainer;
 
 fn test_finding() -> Finding {
     Finding {
+        database: "localhost/testdb".to_string(),
         rule_id: "test-rule".to_string(),
         description: "test description".to_string(),
         category: "test".to_string(),
@@ -33,30 +33,16 @@ fn test_finding() -> Finding {
 struct TestHarness {
     channel: PostgresChannel,
     verify_pool: PgPool,
-    _container: Box<dyn std::any::Any>,
+    _pg: PgContainer,
 }
 
 async fn setup() -> TestHarness {
-    let container = Postgres::default()
-        .with_tag("16-alpine")
-        .start()
-        .await
-        .expect("failed to start postgres container");
-
-    let host = container
-        .get_host()
-        .await
-        .expect("failed to get host")
-        .to_string();
-    let port = container
-        .get_host_port_ipv4(5432)
-        .await
-        .expect("failed to get port");
+    let pg = PgContainer::start().await;
 
     let config = PostgresAlertConfig {
         name: None,
-        host: host.clone(),
-        port,
+        host: pg.host.clone(),
+        port: pg.port,
         dbname: "postgres".to_string(),
         username: "postgres".to_string(),
         password: Some(SecretString::from("postgres")),
@@ -83,8 +69,8 @@ async fn setup() -> TestHarness {
 
     let verify_pool = PgPool::connect_with(
         PgConnectOptions::new()
-            .host(&host)
-            .port(port)
+            .host(&pg.host)
+            .port(pg.port)
             .database("postgres")
             .username("postgres")
             .password("postgres"),
@@ -92,11 +78,7 @@ async fn setup() -> TestHarness {
     .await
     .expect("failed to create verification pool");
 
-    TestHarness {
-        channel,
-        verify_pool,
-        _container: Box::new(container),
-    }
+    TestHarness { channel, verify_pool, _pg: pg }
 }
 
 #[cfg_attr(not(docker), ignore = "Docker daemon not available")]
@@ -120,23 +102,35 @@ async fn send_stores_all_fields() {
 
     h.channel.send(&test_finding()).await.unwrap();
 
-    let row: (String, String, String, String, String, String, String, i64, serde_json::Value) = sqlx::query_as(
-        r#"SELECT rule_id, category, severity, schema_name, table_name, column_name, masked_sample, lsn, primary_key
+    let row: (
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        i64,
+        serde_json::Value,
+    ) = sqlx::query_as(
+        r#"SELECT database, rule_id, category, severity, schema_name, table_name, column_name, masked_sample, lsn, primary_key
            FROM "pgsense_alerts"."findings" LIMIT 1"#,
     )
     .fetch_one(&h.verify_pool)
     .await
     .unwrap();
 
-    assert_eq!(row.0, "test-rule");
-    assert_eq!(row.1, "test");
-    assert_eq!(row.2, "HIGH");
-    assert_eq!(row.3, "public");
-    assert_eq!(row.4, "events");
-    assert_eq!(row.5, "data");
-    assert_eq!(row.6, "***masked***");
-    assert_eq!(row.7, 1);
-    assert_eq!(row.8, serde_json::json!({"id": "1"}));
+    assert_eq!(row.0, "localhost/testdb");
+    assert_eq!(row.1, "test-rule");
+    assert_eq!(row.2, "test");
+    assert_eq!(row.3, "HIGH");
+    assert_eq!(row.4, "public");
+    assert_eq!(row.5, "events");
+    assert_eq!(row.6, "data");
+    assert_eq!(row.7, "***masked***");
+    assert_eq!(row.8, 1);
+    assert_eq!(row.9, serde_json::json!({"id": "1"}));
 }
 
 #[cfg_attr(not(docker), ignore = "Docker daemon not available")]

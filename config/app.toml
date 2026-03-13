@@ -1,7 +1,7 @@
 # pgsense-rs configuration
 #
 # All settings support environment variable overrides with the APP__ prefix.
-# Nesting uses double underscores: APP__POSTGRES__HOST=myhost
+# Nesting uses double underscores: APP__DATABASES__0__HOST=myhost
 #
 # Full documentation: https://github.com/MrEhbr/pgsense-rs
 
@@ -11,9 +11,15 @@
 format = "console"       # "console" or "json"
 output = "stderr"        # "stderr" or "stdout"
 
-# --- PostgreSQL connection (source database to monitor) ---
+# --- Source databases to monitor ---
+#
+# Add one [[databases]] entry per PostgreSQL database.
+# Identity key is "host/dbname" — must be unique across entries.
+#
+# Each entry supports an optional [databases.scan] section to override
+# the top-level [scan] filter for that specific database.
 
-[postgres]
+[[databases]]
 host = "localhost"
 port = 5432
 dbname = "postgres"
@@ -21,9 +27,22 @@ username = "postgres"
 password = "postgres"
 publication = "pgsense_pub"  # must exist: CREATE PUBLICATION pgsense_pub FOR ALL TABLES;
 
-[postgres.tls]
+[databases.tls]
 enabled = false
 # trusted_root_certs = "/path/to/ca.pem"
+
+# Per-database scan filter (optional — overrides top-level [scan] when set):
+# [databases.scan]
+# include_schemas = ["public"]
+# exclude_tables = ["audit_log"]
+
+# Additional database example:
+# [[databases]]
+# host = "db2.example.com"
+# dbname = "orders"
+# username = "postgres"
+# password = "postgres"
+# publication = "pgsense_pub"
 
 # --- Pipeline (replication stream processing) ---
 
@@ -34,7 +53,8 @@ table_error_retry_delay_ms = 10000
 table_error_retry_max_attempts = 5
 max_table_sync_workers = 4
 
-# Store backend for LSN checkpointing — pick ONE:
+# Store backend for LSN checkpointing — shared across all databases.
+# Pick ONE:
 #
 # Memory (default) — state lost on restart:
 # store = "memory"
@@ -55,7 +75,7 @@ path = "./data/pgsense-state.db"
 # Detection rules file. Also settable via CLI: --rules <FILE>
 # rules_file = "config/rules.toml"
 
-# --- Scan filters ---
+# --- Scan filters (top-level defaults, can be overridden per database) ---
 
 [scan]
 # include_schemas = ["public"]       # only scan these schemas (default: all)
@@ -65,7 +85,7 @@ path = "./data/pgsense-state.db"
 # --- Alert channels ---
 
 [alerts]
-dedup_window_seconds = 300  # suppress duplicate (schema, table, column, rule, value) findings within this window
+dedup_window_seconds = 300  # suppress duplicate (database, schema, table, column, rule, value) findings within this window
 
 [alerts.log]
 enabled = true       # structured log output (tracing)

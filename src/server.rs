@@ -7,16 +7,15 @@ use std::{
 };
 
 use axum::{Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
+use metrics_exporter_prometheus::PrometheusHandle;
 use serde::Serialize;
 use tokio::net::TcpListener;
 use tracing::info;
 
-use crate::metrics::Metrics;
-
 #[derive(Clone)]
 pub struct ServerState {
     pub ready: Arc<AtomicBool>,
-    pub metrics: Metrics,
+    pub metrics_handle: PrometheusHandle,
 }
 
 #[derive(Serialize)]
@@ -43,7 +42,7 @@ async fn metrics_handler(State(state): State<ServerState>) -> impl IntoResponse 
     (
         StatusCode::OK,
         [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
-        state.metrics.encode(),
+        state.metrics_handle.render(),
     )
 }
 
@@ -63,7 +62,17 @@ pub async fn start(addr: SocketAddr, state: ServerState) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use metrics_exporter_prometheus::PrometheusBuilder;
+
     use super::*;
+
+    fn test_state(ready: bool) -> ServerState {
+        let recorder = PrometheusBuilder::new().build_recorder();
+        ServerState {
+            ready: Arc::new(AtomicBool::new(ready)),
+            metrics_handle: recorder.handle(),
+        }
+    }
 
     #[tokio::test]
     async fn health_returns_ok() {
@@ -73,21 +82,13 @@ mod tests {
 
     #[tokio::test]
     async fn readiness_when_not_ready() {
-        let state = ServerState {
-            ready: Arc::new(AtomicBool::new(false)),
-            metrics: Metrics::new(),
-        };
-        let resp = readiness(State(state)).await.into_response();
+        let resp = readiness(State(test_state(false))).await.into_response();
         assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[tokio::test]
     async fn readiness_when_ready() {
-        let state = ServerState {
-            ready: Arc::new(AtomicBool::new(true)),
-            metrics: Metrics::new(),
-        };
-        let resp = readiness(State(state)).await.into_response();
+        let resp = readiness(State(test_state(true))).await.into_response();
         assert_eq!(resp.status(), StatusCode::OK);
     }
 }

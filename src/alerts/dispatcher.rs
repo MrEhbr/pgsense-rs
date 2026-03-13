@@ -76,7 +76,6 @@ impl Dispatcher {
             });
         }
 
-        // Warn on duplicate channel names
         let mut seen = std::collections::HashSet::new();
         for nc in &channels {
             if !seen.insert(&nc.name) {
@@ -95,7 +94,7 @@ impl Dispatcher {
     /// Channel failures are logged but do not propagate. When the finding
     /// specifies `channels`, only the named channels are called; `None`
     /// fans out to all channels (backward compatible).
-    pub async fn dispatch(&mut self, finding: &Finding) {
+    pub async fn dispatch(&self, finding: &Finding) {
         if !self.dedup.should_alert(finding) {
             debug!(
                 rule_id = %finding.rule_id,
@@ -112,13 +111,19 @@ impl Dispatcher {
             {
                 continue;
             }
-            if let Err(e) = nc.channel.send(finding).await {
-                error!(
-                    channel = %nc.name,
-                    error = %e,
-                    rule_id = %finding.rule_id,
-                    "alert channel failed"
-                );
+            match nc.channel.send(finding).await {
+                Ok(()) => {
+                    metrics::counter!(crate::metrics::ALERTS_TOTAL, "channel" => nc.name.clone(), "status" => "ok").increment(1);
+                },
+                Err(e) => {
+                    metrics::counter!(crate::metrics::ALERTS_TOTAL, "channel" => nc.name.clone(), "status" => "error").increment(1);
+                    error!(
+                        channel = %nc.name,
+                        error = %e,
+                        rule_id = %finding.rule_id,
+                        "alert channel failed"
+                    );
+                },
             }
         }
     }
@@ -137,6 +142,27 @@ impl Dispatcher {
 
     pub fn channel_names(&self) -> Vec<&str> {
         self.channels.iter().map(|nc| nc.name.as_str()).collect()
+    }
+
+    pub fn validate_channel_routing(&self, rules: &[crate::rules::config::RuleConfig]) {
+        let known: std::collections::HashSet<&str> = self.channel_names().into_iter().collect();
+        for rule in rules {
+            if let Some(channels) = &rule.channels {
+                for ch in channels {
+                    if !known.contains(ch.as_str()) {
+                        tracing::warn!(rule_id = %rule.id, channel = %ch, "rule references unknown alert channel");
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub fn default_for_test() -> Self {
+        Self {
+            channels: Vec::new(),
+            dedup: Deduplicator::new(Duration::from_secs(3600)),
+        }
     }
 
     #[cfg(test)]
@@ -190,7 +216,7 @@ mod tests {
     #[tokio::test]
     async fn dispatch_calls_channel() {
         let (name, ch, count) = mock("ch-a");
-        let mut dispatcher = Dispatcher::with_named_channels(vec![(name, ch)]);
+        let dispatcher = Dispatcher::with_named_channels(vec![(name, ch)]);
 
         dispatcher.dispatch(&test_finding()).await;
         assert_eq!(count.load(Ordering::Relaxed), 1);
@@ -200,7 +226,7 @@ mod tests {
     async fn dispatch_continues_on_channel_error() {
         let (failing, fail_count) = MockChannel::failing();
         let (ok, ok_count) = MockChannel::new();
-        let mut dispatcher = Dispatcher::with_named_channels(vec![
+        let dispatcher = Dispatcher::with_named_channels(vec![
             ("fail".into(), AlertChannel::Mock(failing)),
             ("ok".into(), AlertChannel::Mock(ok)),
         ]);
@@ -218,7 +244,7 @@ mod tests {
             webhooks: vec![],
             ..Default::default()
         };
-        let mut dispatcher = Dispatcher::from_config(&config).await.unwrap();
+        let dispatcher = Dispatcher::from_config(&config).await.unwrap();
         let finding = test_finding();
 
         // Both calls succeed (no channels to fail), but second is deduplicated
@@ -243,7 +269,7 @@ mod tests {
     async fn dispatch_routes_to_specified_channels() {
         let (name_a, ch_a, count_a) = mock("ch-a");
         let (name_b, ch_b, count_b) = mock("ch-b");
-        let mut dispatcher = Dispatcher::with_named_channels(vec![(name_a, ch_a), (name_b, ch_b)]);
+        let dispatcher = Dispatcher::with_named_channels(vec![(name_a, ch_a), (name_b, ch_b)]);
 
         let mut finding = test_finding();
         finding.channels = Some(vec!["ch-a".into()]);
@@ -257,7 +283,7 @@ mod tests {
     async fn dispatch_routes_to_all_when_channels_is_none() {
         let (name_a, ch_a, count_a) = mock("ch-a");
         let (name_b, ch_b, count_b) = mock("ch-b");
-        let mut dispatcher = Dispatcher::with_named_channels(vec![(name_a, ch_a), (name_b, ch_b)]);
+        let dispatcher = Dispatcher::with_named_channels(vec![(name_a, ch_a), (name_b, ch_b)]);
 
         dispatcher.dispatch(&test_finding()).await;
         assert_eq!(count_a.load(Ordering::Relaxed), 1);
@@ -269,7 +295,7 @@ mod tests {
         let (name_a, ch_a, count_a) = mock("ch-a");
         let (name_b, ch_b, count_b) = mock("ch-b");
         let (name_c, ch_c, count_c) = mock("ch-c");
-        let mut dispatcher = Dispatcher::with_named_channels(vec![(name_a, ch_a), (name_b, ch_b), (name_c, ch_c)]);
+        let dispatcher = Dispatcher::with_named_channels(vec![(name_a, ch_a), (name_b, ch_b), (name_c, ch_c)]);
 
         let mut finding = test_finding();
         finding.channels = Some(vec!["ch-a".into(), "ch-c".into()]);

@@ -8,7 +8,10 @@ use etl::{
 use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, trace};
 
-use crate::events::{ColumnMeta, ScanEvent, TableMeta, extract_scan_events};
+use crate::{
+    events::{ColumnMeta, ScanEvent, TableMeta, extract_scan_events},
+    scanner::ScanFilter,
+};
 
 /// Registry of table schemas, updated from Relation events.
 pub type TableRegistry = Arc<RwLock<HashMap<TableId, TableMeta>>>;
@@ -17,13 +20,20 @@ pub type TableRegistry = Arc<RwLock<HashMap<TableId, TableMeta>>>;
 /// each event and forwards them as ScanEvents for rule matching.
 #[derive(Clone)]
 pub struct ScannerDestination {
+    database: String,
+    filter: ScanFilter,
     event_tx: mpsc::Sender<Vec<ScanEvent>>,
     table_registry: TableRegistry,
 }
 
 impl ScannerDestination {
-    pub fn new(event_tx: mpsc::Sender<Vec<ScanEvent>>, table_registry: TableRegistry) -> Self {
-        Self { event_tx, table_registry }
+    pub fn new(database: String, filter: ScanFilter, event_tx: mpsc::Sender<Vec<ScanEvent>>, table_registry: TableRegistry) -> Self {
+        Self {
+            database,
+            filter,
+            event_tx,
+            table_registry,
+        }
     }
 }
 
@@ -73,7 +83,17 @@ impl Destination for ScannerDestination {
         }
 
         let registry = self.table_registry.read().await;
-        let scan_events = extract_scan_events(&events, &registry);
+        let scan_events = extract_scan_events(&events, &registry, &self.database);
+
+        let scan_events: Vec<ScanEvent> = scan_events
+            .into_iter()
+            .filter(|e| self.filter.matches_schema(&e.schema_name) && self.filter.matches_table(&e.table_name))
+            .map(|mut e| {
+                e.columns
+                    .retain(|c| self.filter.should_include_column(&c.name));
+                e
+            })
+            .collect();
 
         if !scan_events.is_empty() {
             trace!(count = scan_events.len(), "forwarding scan events");

@@ -1,5 +1,4 @@
 use std::{
-    collections::HashSet,
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::{
@@ -9,6 +8,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use arc_swap::ArcSwap;
 use clap::Parser;
 use clap_verbosity_flag::{InfoLevel, Verbosity};
 use tracing::{info, warn};
@@ -16,10 +16,9 @@ use tracing::{info, warn};
 use crate::{
     alerts::dispatcher::Dispatcher,
     config::Config,
-    metrics::Metrics,
-    pipeline::runner::PipelineRunner,
+    pipeline::supervisor::Supervisor,
     rules::{config::RuleConfig, engine::RuleEngine},
-    scanner::{ScanFilter, Scanner},
+    scanner::Scanner,
     server::ServerState,
 };
 
@@ -34,25 +33,22 @@ pub struct Args {
 
     #[command(flatten)]
     pub verbosity: Verbosity<InfoLevel>,
-
-    /// Pipeline identifier (used for replication slot naming)
-    #[arg(long, default_value = "1")]
-    pub pipeline_id: u64,
 }
 
 pub async fn run(args: Args) -> Result<()> {
     let config: Config = crate::config::load(args.config.as_deref()).context("failed to load configuration")?;
     let config = apply_overrides(&args, config);
+    config.validate().context("invalid configuration")?;
     let _guard = crate::logging::setup(&config.log).context("failed to initialize logging")?;
 
-    let metrics = Metrics::new();
+    let metrics_handle = crate::metrics::init();
     let ready = Arc::new(AtomicBool::new(false));
 
     if config.server.enabled {
         let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));
         let state = ServerState {
             ready: ready.clone(),
-            metrics: metrics.clone(),
+            metrics_handle,
         };
         tokio::spawn(async move {
             if let Err(e) = crate::server::start(addr, state).await {
@@ -66,83 +62,50 @@ pub async fn run(args: Args) -> Result<()> {
         .as_deref()
         .or(config.rules_file.as_deref())
         .context("no rules file specified — use --rules <FILE> or set rules_file in config")?;
-    let (mut scanner, rules) = build_scanner(rules_path, &config.scan)?;
+    let (scanner, rules) = build_scanner(rules_path)?;
+    let scanner = Arc::new(ArcSwap::from_pointee(scanner));
 
-    let mut dispatcher = Dispatcher::from_config(&config.alerts)
+    let dispatcher = Dispatcher::from_config(&config.alerts)
         .await
         .context("failed to initialize alert dispatcher")?;
-    validate_channel_routing(&rules, &dispatcher);
+    dispatcher.validate_channel_routing(&rules);
     info!(channels = dispatcher.channel_count(), "alert dispatcher ready");
+    let dispatcher = Arc::new(dispatcher);
 
-    let mut runner = PipelineRunner::new(args.pipeline_id, &config.postgres, &config.pipeline)
-        .await
-        .context("failed to create pipeline")?;
+    let databases = config.databases();
+    let (mut supervisor, mut exit_rx) = Supervisor::new(databases, config.pipeline.clone(), scanner.clone(), dispatcher.clone());
+    supervisor.start().await?;
 
-    let mut event_rx = runner
-        .take_event_receiver()
-        .context("event receiver already taken")?;
-
-    runner.start().await.context("failed to start pipeline")?;
-    let mut pipeline_done = runner.spawn_wait().context("pipeline already consumed")?;
-    ready.store(true, Ordering::Relaxed);
-
-    // Watch rules file for hot reload — _watcher must stay alive for the duration
-    // of the scan
+    // Watch rules file for hot reload — _watcher must stay alive for scan duration
     let (mut rules_rx, _watcher) = crate::watcher::watch_file(rules_path).context("failed to set up rules file watcher")?;
     let rules_path = rules_path.to_path_buf();
 
-    let mut events_processed: u64 = 0;
-    let mut findings_count: u64 = 0;
+    ready.store(true, Ordering::Relaxed);
 
-    info!("scanning started — press Ctrl+C to stop");
+    info!(
+        databases = supervisor.database_count(),
+        "scanning started — press Ctrl+C to stop"
+    );
 
     loop {
         tokio::select! {
-            batch = event_rx.recv() => {
-                match batch {
-                    Some(events) => {
-                        for event in &events {
-                            let timer = std::time::Instant::now();
-                            let findings = scanner.scan(event);
-                            let elapsed = timer.elapsed();
-
-                            metrics.events_total.inc();
-                            metrics.scan_duration_seconds.observe(elapsed.as_secs_f64());
-                            events_processed += 1;
-
-                            for finding in &findings {
-                                metrics.findings_total
-                                    .with_label_values(&[&finding.category, &finding.severity.to_string()])
-                                    .inc();
-                                findings_count += 1;
-                                dispatcher.dispatch(finding).await;
-                            }
-                        }
-                    }
-                    None => {
-                        warn!("event channel closed — pipeline may have stopped");
-                        break;
-                    }
+            Some((database, result)) = exit_rx.recv() => {
+                match &result {
+                    Ok(()) => info!(database = %database, "pipeline exited normally"),
+                    Err(e) => warn!(database = %database, error = %e, "pipeline exited with error"),
                 }
-            }
-            result = &mut pipeline_done => {
-                match result {
-                    Ok(Ok(())) => info!("pipeline exited normally"),
-                    Ok(Err(e)) => warn!(error = %e, "pipeline exited with error"),
-                    Err(_) => warn!("pipeline task was dropped unexpectedly"),
+                if supervisor.all_terminated() {
+                    break;
                 }
-                break;
             }
             _ = rules_rx.recv() => {
-                // Debounce: let the editor finish writing before we read the file
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                // Drain any extra notifications that arrived during the delay
                 while rules_rx.try_recv().is_ok() {}
-                match build_scanner(&rules_path, &config.scan) {
+                match build_scanner(&rules_path) {
                     Ok((new_scanner, new_rules)) => {
-                        validate_channel_routing(&new_rules, &dispatcher);
+                        dispatcher.validate_channel_routing(&new_rules);
                         info!(rules = new_scanner.rule_count(), path = %rules_path.display(), "rules hot-reloaded");
-                        scanner = new_scanner;
+                        scanner.store(Arc::new(new_scanner));
                     }
                     Err(e) => {
                         warn!(error = %e, path = %rules_path.display(), "failed to reload rules — keeping previous rules");
@@ -150,41 +113,26 @@ pub async fn run(args: Args) -> Result<()> {
                 }
             }
             _ = tokio::signal::ctrl_c() => {
-                info!("shutdown signal received");
-                break;
+                info!("shutdown signal received, waiting for pipelines to stop...");
+                supervisor.shutdown();
             }
         }
     }
 
     dispatcher.flush().await;
 
-    let events = events_processed;
-    let findings = findings_count;
-    info!(events, findings, "scan complete");
+    info!("scan complete");
 
     Ok(())
 }
 
-fn build_scanner(rules_path: &Path, scan_filter: &ScanFilter) -> Result<(Scanner, Vec<RuleConfig>)> {
+fn build_scanner(rules_path: &Path) -> Result<(Scanner, Vec<RuleConfig>)> {
     let rules = crate::config::load_rules(rules_path).context("failed to load rules")?;
     info!(rules = rules.len(), path = %rules_path.display(), "rules loaded");
     let engine = RuleEngine::new(&rules).context("failed to compile detection rules")?;
-    let scanner = Scanner::new(engine, scan_filter.clone());
+    let scanner = Scanner::new(engine);
     info!(rules = scanner.rule_count(), "detection engine ready");
     Ok((scanner, rules))
-}
-
-fn validate_channel_routing(rules: &[RuleConfig], dispatcher: &Dispatcher) {
-    let known: HashSet<&str> = dispatcher.channel_names().into_iter().collect();
-    for rule in rules {
-        if let Some(channels) = &rule.channels {
-            for ch in channels {
-                if !known.contains(ch.as_str()) {
-                    warn!(rule_id = %rule.id, channel = %ch, "rule references unknown alert channel");
-                }
-            }
-        }
-    }
 }
 
 fn apply_overrides(args: &Args, config: Config) -> Config {
@@ -209,10 +157,8 @@ mod tests {
             config: None,
             rules: None,
             verbosity: Verbosity::default(),
-            pipeline_id: 1,
         };
         let result = apply_overrides(&args, config);
-        assert_eq!(result.postgres.host, "localhost");
         assert_eq!(result.pipeline.batch_max_size, 1000);
         assert_eq!(result.alerts.dedup_window_seconds, 300);
         assert!(!result.server.enabled);

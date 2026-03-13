@@ -247,8 +247,8 @@ impl Inner {
                 "elements": [{
                     "type": "mrkdwn",
                     "text": format!(
-                        "`{}.{}.{}` · Rule: *{}* · Category: *{}* · LSN: `{}`",
-                        finding.schema_name, finding.table_name, finding.column_name,
+                        "`{}` · `{}.{}.{}` · Rule: *{}* · Category: *{}* · LSN: `{}`",
+                        finding.database, finding.schema_name, finding.table_name, finding.column_name,
                         finding.rule_id, finding.category, finding.lsn,
                     ),
                 }]
@@ -295,6 +295,7 @@ impl Inner {
                         "fields": [
                             { "type": "mrkdwn", "text": format!("*Rule*\n{}", finding.rule_id) },
                             { "type": "mrkdwn", "text": format!("*Category*\n{}", finding.category) },
+                            { "type": "mrkdwn", "text": format!("*Database*\n{}", finding.database) },
                             { "type": "mrkdwn", "text": format!("*Table*\n{}.{}", finding.schema_name, finding.table_name) },
                             { "type": "mrkdwn", "text": format!("*Column*\n{}", finding.column_name) },
                         ]

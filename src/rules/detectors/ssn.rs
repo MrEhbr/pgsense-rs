@@ -6,7 +6,6 @@ pub(super) fn scan(value: &str) -> Vec<String> {
     let chars: Vec<char> = value.chars().collect();
     let len = chars.len();
 
-    // SSN is exactly 11 chars: DDD-DD-DDDD
     if len < 11 {
         return results;
     }
@@ -21,7 +20,6 @@ pub(super) fn scan(value: &str) -> Vec<String> {
             continue;
         }
 
-        // Check pattern: DDD<sep>DD<sep>DDDD where sep is - or . or space
         let sep = chars[i + 3];
         if chars[i].is_ascii_digit()
             && chars[i + 1].is_ascii_digit()

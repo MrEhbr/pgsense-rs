@@ -8,7 +8,7 @@ use pgsense_rs::{
         config::{RuleConfig, RuleType, Severity},
         engine::RuleEngine,
     },
-    scanner::{ScanFilter, Scanner},
+    scanner::Scanner,
 };
 
 // Single trivial rule — keeps rule cost near-zero so benchmarks measure scanner
@@ -42,6 +42,7 @@ fn col(name: &str, type_name: &str, value: &str) -> ColumnValue {
 /// 15-column event. Mostly non-text types, 3 scannable text columns.
 fn event(with_match: bool) -> ScanEvent {
     ScanEvent {
+        database: "localhost/bench".to_string(),
         table_id: etl::types::TableId(1),
         schema_name: "public".to_string(),
         table_name: "t1".to_string(),
@@ -103,6 +104,7 @@ fn wide_event() -> ScanEvent {
         columns.push(col(&format!("c_text_{i}"), "text", "clean ordinary value"));
     }
     ScanEvent {
+        database: "localhost/bench".to_string(),
         table_id: etl::types::TableId(1),
         schema_name: "public".to_string(),
         table_name: "t2".to_string(),
@@ -116,45 +118,33 @@ fn wide_event() -> ScanEvent {
 
 fn bench_event_no_match(c: &mut Criterion) {
     let engine = RuleEngine::new(&noop_rule()).unwrap();
-    let scanner = Scanner::new(engine, ScanFilter::default());
+    let scanner = Scanner::new(engine);
     let ev = event(false);
     c.bench_function("scan/event_no_match", |b| b.iter(|| scanner.scan(black_box(&ev))));
 }
 
 fn bench_event_with_match(c: &mut Criterion) {
     let engine = RuleEngine::new(&noop_rule()).unwrap();
-    let scanner = Scanner::new(engine, ScanFilter::default());
+    let scanner = Scanner::new(engine);
     let ev = event(true);
     c.bench_function("scan/event_with_match", |b| b.iter(|| scanner.scan(black_box(&ev))));
 }
 
 fn bench_type_filtering(c: &mut Criterion) {
     let engine = RuleEngine::new(&noop_rule()).unwrap();
-    let scanner = Scanner::new(engine, ScanFilter::default());
+    let scanner = Scanner::new(engine);
     let ev = wide_event();
     c.bench_function("scan/type_filtering", |b| b.iter(|| scanner.scan(black_box(&ev))));
 }
 
-fn bench_table_exclusion(c: &mut Criterion) {
-    let engine = RuleEngine::new(&noop_rule()).unwrap();
-    let scanner = Scanner::new(
-        engine,
-        ScanFilter {
-            exclude_tables: vec!["t1".to_string()],
-            ..Default::default()
-        },
-    );
-    let ev = event(false);
-    c.bench_function("scan/table_exclusion", |b| b.iter(|| scanner.scan(black_box(&ev))));
-}
-
 fn bench_value_sizes(c: &mut Criterion) {
     let engine = RuleEngine::new(&noop_rule()).unwrap();
-    let scanner = Scanner::new(engine, ScanFilter::default());
+    let scanner = Scanner::new(engine);
     let mut group = c.benchmark_group("scan/value_size");
 
     for size in [64, 512, 4096] {
         let ev = ScanEvent {
+            database: "localhost/bench".to_string(),
             table_id: etl::types::TableId(1),
             schema_name: "public".to_string(),
             table_name: "t3".to_string(),
@@ -173,7 +163,7 @@ fn bench_value_sizes(c: &mut Criterion) {
 
 fn bench_throughput(c: &mut Criterion) {
     let engine = RuleEngine::new(&noop_rule()).unwrap();
-    let scanner = Scanner::new(engine, ScanFilter::default());
+    let scanner = Scanner::new(engine);
     let clean = event(false);
     let hit = event(true);
 
@@ -265,7 +255,7 @@ fn bench_event_extraction(c: &mut Criterion) {
     let batch: Vec<Event> = vec![insert; 100];
 
     c.bench_function("extract/batch_100", |b| {
-        b.iter(|| events::extract_scan_events(black_box(&batch), black_box(&registry)));
+        b.iter(|| events::extract_scan_events(black_box(&batch), black_box(&registry), "localhost/bench"));
     });
 }
 
@@ -274,7 +264,6 @@ criterion_group!(
     bench_event_no_match,
     bench_event_with_match,
     bench_type_filtering,
-    bench_table_exclusion,
     bench_value_sizes,
     bench_throughput,
     bench_event_extraction,

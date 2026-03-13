@@ -149,7 +149,6 @@ mod tests {
 
     use super::*;
 
-    // E.164 format
     #[rstest]
     #[case("+44 20 7946 0958", &["+44 20 7946 0958"])]
     #[case("+1 212 234 5678", &["+1 212 234 5678"])]
@@ -163,7 +162,6 @@ mod tests {
         assert_eq!(scan(input), expected);
     }
 
-    // 00-prefix international
     #[rstest]
     #[case("0033 1 23 45 67 89", &["0033 1 23 45 67 89"])]
     #[case("0044 20 7946 0958", &["0044 20 7946 0958"])]
@@ -172,7 +170,6 @@ mod tests {
         assert_eq!(scan(input), expected);
     }
 
-    // NANP formatted (area code and exchange must start 2-9)
     #[rstest]
     #[case("(212) 234-5678", &["(212) 234-5678"])]
     #[case("312-456-7890", &["312-456-7890"])]
@@ -182,7 +179,6 @@ mod tests {
         assert_eq!(scan(input), expected);
     }
 
-    // Embedded in text
     #[rstest]
     #[case("call +44 20 7946 0958 for info", &["+44 20 7946 0958"])]
     #[case("phone: (212) 234-5678, fax: 312-456-7890", &["(212) 234-5678", "312-456-7890"])]
@@ -190,7 +186,6 @@ mod tests {
         assert_eq!(scan(input), expected);
     }
 
-    // False positive rejection
     #[rstest]
     #[case("1234567890")] // bare 10 digits, no separator
     #[case("12345")] // too short
@@ -206,7 +201,6 @@ mod tests {
         assert_eq!(scan(input), Vec::<String>::new());
     }
 
-    // Boundary checks
     #[rstest]
     #[case("abc+44 20 7946 0958xyz", &[])] // alphanumeric boundary
     #[case("_212-234-5678_", &["212-234-5678"])] // underscore is not a word boundary
@@ -215,7 +209,6 @@ mod tests {
         assert_eq!(scan(input), expected);
     }
 
-    // NANP: area code and exchange must start with 2-9
     #[rstest]
     #[case("(155) 234-5678", &[])] // area code starts with 1
     #[case("(055) 234-5678", &[])] // area code starts with 0

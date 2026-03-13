@@ -1,13 +1,16 @@
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use config::{Environment, File, FileFormat};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
     alerts::config::AlertsConfig,
     logging::LogConfig,
-    pipeline::config::{PipelineSettings, PostgresConfig},
+    pipeline::config::{DatabaseConfig, PipelineSettings},
     rules::config::RuleConfig,
     scanner::ScanFilter,
 };
@@ -29,12 +32,45 @@ impl Default for ServerConfig {
 #[serde(default)]
 pub struct Config {
     pub log: LogConfig,
-    pub postgres: PostgresConfig,
+    pub databases: Vec<DatabaseConfig>,
     pub pipeline: PipelineSettings,
     pub rules_file: Option<PathBuf>,
     pub scan: ScanFilter,
     pub alerts: AlertsConfig,
     pub server: ServerConfig,
+}
+
+impl Config {
+    /// Returns database configs with the global scan filter applied as default
+    /// for databases that don't define their own.
+    pub fn databases(&self) -> Vec<DatabaseConfig> {
+        self.databases
+            .iter()
+            .map(|db| {
+                let mut db = db.clone();
+                if db.scan.is_none() {
+                    db.scan = Some(self.scan.clone());
+                }
+                db
+            })
+            .collect()
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if self.databases.is_empty() {
+            bail!("no databases configured — add at least one [[databases]] entry to your config file");
+        }
+
+        let mut seen = HashSet::new();
+        for db in &self.databases {
+            let id = db.database_id();
+            if !seen.insert(id.clone()) {
+                bail!("duplicate database '{id}' — each host/dbname combination must be unique");
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -69,4 +105,85 @@ where
         .build()?;
 
     Ok(config.try_deserialize()?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pipeline::config::DatabaseConfig;
+
+    fn single_db_config() -> Config {
+        Config {
+            databases: vec![DatabaseConfig::default()],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn validate_empty_databases_rejected() {
+        let config = Config::default();
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("no databases configured"));
+    }
+
+    #[test]
+    fn validate_single_database_ok() {
+        single_db_config().validate().unwrap();
+    }
+
+    #[test]
+    fn validate_duplicate_databases_rejected() {
+        let config = Config {
+            databases: vec![DatabaseConfig::default(), DatabaseConfig::default()],
+            ..Default::default()
+        };
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("duplicate database"));
+    }
+
+    #[test]
+    fn resolved_databases_applies_global_scan_filter() {
+        let config = Config {
+            databases: vec![
+                DatabaseConfig {
+                    dbname: "db1".to_string(),
+                    ..Default::default()
+                },
+                DatabaseConfig {
+                    dbname: "db2".to_string(),
+                    scan: Some(ScanFilter {
+                        include_schemas: vec!["custom".into()],
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            ],
+            scan: ScanFilter {
+                include_schemas: vec!["public".into()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let resolved = config.databases();
+        assert_eq!(resolved[0].scan.as_ref().unwrap().include_schemas, vec!["public".to_string()]);
+        assert_eq!(resolved[1].scan.as_ref().unwrap().include_schemas, vec!["custom".to_string()]);
+    }
+
+    #[test]
+    fn validate_distinct_databases_ok() {
+        let config = Config {
+            databases: vec![
+                DatabaseConfig {
+                    dbname: "db1".to_string(),
+                    ..Default::default()
+                },
+                DatabaseConfig {
+                    dbname: "db2".to_string(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        config.validate().unwrap();
+    }
 }

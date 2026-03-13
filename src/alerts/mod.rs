@@ -63,9 +63,9 @@ impl AlertChannel {
     }
 }
 
-/// JSON-serializable alert payload for webhook and stdout channels.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertPayload {
+    pub database: String,
     pub rule_id: String,
     pub description: String,
     pub category: String,
@@ -83,6 +83,7 @@ pub struct AlertPayload {
 impl From<&Finding> for AlertPayload {
     fn from(f: &Finding) -> Self {
         Self {
+            database: f.database.clone(),
             rule_id: f.rule_id.clone(),
             description: f.description.clone(),
             category: f.category.clone(),
@@ -111,6 +112,7 @@ pub mod testing {
 
     pub fn test_finding() -> Finding {
         Finding {
+            database: "localhost/testdb".to_string(),
             rule_id: "test-rule".to_string(),
             description: "test description".to_string(),
             category: "test".to_string(),
