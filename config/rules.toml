@@ -35,32 +35,6 @@
 #   include_columns  — only scan these columns (default: all)
 #   exclude_columns  — skip these columns
 
-# --- Builtin detectors (algorithmic, no regex needed) ---
-
-[[rules]]
-type = "builtin"
-id = "credit-card"
-description = "Credit card numbers (Visa, MC, Amex, Discover)"
-category = "PCI_DSS"
-severity = "critical"
-builtin = "credit_card"
-
-[[rules]]
-type = "builtin"
-id = "ssn"
-description = "US Social Security Numbers"
-category = "PII"
-severity = "critical"
-builtin = "ssn"
-
-[[rules]]
-type = "builtin"
-id = "phone"
-description = "Phone numbers (E.164, NANP, international 00-prefix)"
-category = "PII"
-severity = "high"
-builtin = "phone"
-
 # --- Regex rules ---
 
 # [[rules]]
@@ -122,3 +96,169 @@ builtin = "phone"
 # category = "CUSTOM"
 # severity = "medium"
 # script = "scripts/my_detector.rhai"
+
+# --- Builtin detectors (algorithmic, no regex needed) ---
+
+[[rules]]
+type = "builtin"
+id = "credit-card"
+description = "Credit card numbers (Visa, MC, Amex, Discover)"
+category = "PCI_DSS"
+severity = "critical"
+builtin = "credit_card"
+
+[[rules]]
+type = "builtin"
+id = "ssn"
+description = "US Social Security Numbers"
+category = "PII"
+severity = "critical"
+builtin = "ssn"
+
+[[rules]]
+type = "builtin"
+id = "phone"
+description = "Phone numbers (E.164, NANP, international 00-prefix)"
+category = "PII"
+severity = "high"
+builtin = "phone"
+
+# --- Secrets detection (curated from gitleaks) ---
+#
+# Source: https://github.com/gitleaks/gitleaks
+# Curated for database scanning: only high-popularity services where leaked
+# credentials cause significant damage, using standalone-prefix patterns
+# (no variable-name / assignment context needed).
+
+# Cloud providers
+
+[[rules]]
+id = "aws-access-key"
+description = "AWS access key ID (AKIA/ASIA/ABIA/ACCA prefix)"
+category = "SECRETS"
+severity = "critical"
+pattern = '\b(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}\b'
+
+[[rules]]
+id = "gcp-api-key"
+description = "Google Cloud Platform API key"
+category = "SECRETS"
+severity = "critical"
+pattern = '\bAIza[A-Za-z0-9_-]{35}\b'
+
+[[rules]]
+id = "digitalocean-token"
+description = "DigitalOcean access token (PAT, OAuth, or refresh)"
+category = "SECRETS"
+severity = "high"
+pattern = '\bdo[opr]_v1_[a-f0-9]{64}\b'
+
+[[rules]]
+id = "heroku-api-key"
+description = "Heroku API key (v2)"
+category = "SECRETS"
+severity = "high"
+pattern = '\bHRKU-AA[0-9a-zA-Z_-]{58}\b'
+
+# Git platforms
+
+[[rules]]
+id = "github-token"
+description = "GitHub PAT, fine-grained PAT, app, OAuth, or refresh token"
+category = "SECRETS"
+severity = "high"
+pattern = '(?:ghp|gho|ghu|ghs|ghr)_[0-9a-zA-Z]{36}|github_pat_[A-Za-z0-9_]{82}'
+
+[[rules]]
+id = "gitlab-token"
+description = "GitLab personal, deploy, runner, or pipeline trigger token"
+category = "SECRETS"
+severity = "high"
+pattern = 'glpat-[A-Za-z0-9_-]{20}|glptt-[0-9a-f]{40}|gl(?:dt|rt)-[0-9a-zA-Z_-]{20}|GR1348941[A-Za-z0-9_-]{20}'
+
+# Payment processors
+
+[[rules]]
+id = "stripe-key"
+description = "Stripe secret or restricted API key"
+category = "SECRETS"
+severity = "critical"
+pattern = '\b(?:sk|rk)_(?:test|live|prod)_[a-zA-Z0-9]{10,99}\b'
+
+[[rules]]
+id = "shopify-token"
+description = "Shopify access token or shared secret"
+category = "SECRETS"
+severity = "high"
+pattern = 'shp(?:at|ca|pa|ss)_[a-fA-F0-9]{32}'
+
+# Communication & email
+
+[[rules]]
+id = "slack-token"
+description = "Slack bot, app, or user OAuth token"
+category = "SECRETS"
+severity = "high"
+pattern = 'xoxb-[0-9]{10,13}-[0-9]{10,13}[a-zA-Z0-9-]*|xox[pe](?:-[0-9]{10,13}){3}-[a-zA-Z0-9-]{28,34}|xapp-\d-[A-Za-z0-9]+-\d-[A-Za-z0-9]+'
+
+[[rules]]
+id = "slack-webhook"
+description = "Slack incoming webhook URL"
+category = "SECRETS"
+severity = "high"
+pattern = 'hooks\.slack\.com/(?:services|workflows|triggers)/[A-Za-z0-9+/]{43,56}'
+
+[[rules]]
+id = "teams-webhook"
+description = "Microsoft Teams incoming webhook URL"
+category = "SECRETS"
+severity = "high"
+pattern = '[a-z0-9]+\.webhook\.office\.com/webhookb2/'
+
+[[rules]]
+id = "twilio-api-key"
+description = "Twilio API key"
+category = "SECRETS"
+severity = "high"
+pattern = '\bSK[0-9a-fA-F]{32}\b'
+
+[[rules]]
+id = "sendgrid-api-key"
+description = "SendGrid API key"
+category = "SECRETS"
+severity = "high"
+pattern = '\bSG\.[a-zA-Z0-9=_.-]{66}\b'
+
+# AI services
+
+[[rules]]
+id = "openai-api-key"
+description = "OpenAI API key"
+category = "SECRETS"
+severity = "high"
+pattern = '\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{40,}\b'
+
+[[rules]]
+id = "anthropic-api-key"
+description = "Anthropic API key"
+category = "SECRETS"
+severity = "high"
+pattern = '\bsk-ant-(?:api03|admin01)-[a-zA-Z0-9_-]{93}AA\b'
+
+# Infrastructure
+
+[[rules]]
+id = "vault-token"
+description = "HashiCorp Vault service or batch token"
+category = "SECRETS"
+severity = "critical"
+pattern = '\bhvs\.[A-Za-z0-9_-]{90,120}\b|\bhvb\.[A-Za-z0-9_-]{138,300}\b'
+
+# Cryptographic material
+
+[[rules]]
+id = "private-key"
+description = "PEM-encoded private key header"
+category = "SECRETS"
+severity = "critical"
+pattern = '-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY-----'
