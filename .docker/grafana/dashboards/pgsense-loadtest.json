@@ -107,17 +107,225 @@
       ]
     },
     {
+      "title": "Pipeline Health",
+      "description": "Are all database pipelines connected and stable?",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "collapsed": false
+    },
+    {
+      "title": "Pipeline Status",
+      "description": "1 = connected, 0 = disconnected. Red = at least one pipeline is down.",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "pgsense_pipeline_connected",
+          "legendFormat": "{{database}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Pipeline Reconnects",
+      "description": "Reconnection rate per database. Spikes indicate unstable connections. Sustained reconnects = potential WAL gaps.",
+      "type": "timeseries",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15 },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "rate(pgsense_pipeline_reconnects_total[1m])",
+          "legendFormat": "{{database}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Rules Loaded",
+      "description": "Number of active detection rules. Drop = failed hot-reload or broken config.",
+      "type": "stat",
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "pgsense_rules_loaded",
+          "legendFormat": "rules",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Config Reloads",
+      "description": "Hot-reload attempts by status. Errors mean the new rules file had issues — previous rules are still active.",
+      "type": "timeseries",
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 50 }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "ok" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "error" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "rate(pgsense_config_reloads_total[5m])",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Detection Effectiveness",
+      "description": "Is the detection pipeline working correctly — filtering, dedup, scripts?",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "collapsed": false
+    },
+    {
+      "title": "Events Skipped by Filter",
+      "description": "Events excluded by scan filters before scanning. High rate = check filter config. Reason shows schema vs table exclusion.",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15 },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (database, reason) (rate(pgsense_events_skipped_total[1m]))",
+          "legendFormat": "{{database}} ({{reason}})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Dedup Ratio",
+      "description": "Alert deduplication: suppressed vs passed. High suppression = working correctly for repeat data. Zero suppression = dedup may not be active.",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15 }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*passed.*" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byRegexp", "options": ".*suppressed.*" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (rate(pgsense_dedup_total[1m]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Script Errors",
+      "description": "Rhai script execution failures by rule. Any non-zero value = broken script rule silently skipping detection.",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15 },
+          "color": { "mode": "fixed", "fixedColor": "red" },
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "rate(pgsense_script_errors_total[1m])",
+          "legendFormat": "{{rule_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "title": "Resources & Queues",
       "description": "Where's the bottleneck — CPU, memory, queue, or alert delivery?",
       "type": "row",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
       "collapsed": false
     },
     {
       "title": "CPU (pgsense vs postgres)",
       "description": "CPU cores used. If pgsense CPU is pegged at 1.0 while lag grows, it's CPU-bound — optimize rules or add concurrency.",
       "type": "timeseries",
-      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 10 },
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 24 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
@@ -152,7 +360,7 @@
       "title": "Memory RSS",
       "description": "Physical memory used. If RSS keeps climbing under load, there may be a memory leak or unbounded caching.",
       "type": "timeseries",
-      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 10 },
+      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 24 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
@@ -187,7 +395,7 @@
       "title": "Event queue depth",
       "description": "Pending batches waiting to be scanned (max 256). Above zero = scanner is slower than the pipeline. At 256 = fully blocked, back-pressuring PG.",
       "type": "timeseries",
-      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 10 },
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 24 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
@@ -219,7 +427,7 @@
       "title": "Alert dispatch time",
       "description": "Time to deliver alerts (only for events with findings). If this is high, alert channels (webhook/slack) are slowing the pipeline.",
       "type": "timeseries",
-      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 10 },
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 24 },
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
@@ -249,13 +457,13 @@
     {
       "title": "Details",
       "type": "row",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
       "collapsed": true,
       "panels": [
         {
           "title": "Findings rate (by category)",
           "type": "timeseries",
-          "gridPos": { "h": 7, "w": 8, "x": 0, "y": 18 },
+          "gridPos": { "h": 7, "w": 8, "x": 0, "y": 32 },
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "fieldConfig": {
             "defaults": {
@@ -276,7 +484,7 @@
           "title": "Alert delivery (by channel)",
           "description": "Alert dispatch rate by channel and status. If error lines appear, alert channels are failing. Compare with dispatch latency to diagnose.",
           "type": "timeseries",
-          "gridPos": { "h": 7, "w": 8, "x": 8, "y": 18 },
+          "gridPos": { "h": 7, "w": 8, "x": 8, "y": 32 },
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "fieldConfig": {
             "defaults": {
@@ -297,7 +505,7 @@
           "title": "Batch size from pipeline",
           "description": "Events per batch delivered by etl. Larger batches = more efficient processing.",
           "type": "timeseries",
-          "gridPos": { "h": 7, "w": 8, "x": 16, "y": 18 },
+          "gridPos": { "h": 7, "w": 8, "x": 16, "y": 32 },
           "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
           "fieldConfig": {
             "defaults": {
