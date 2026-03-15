@@ -1,0 +1,23 @@
+pg_replication_slot_lag:
+  query: |
+    SELECT
+      slot_name,
+      slot_type,
+      active::int AS active,
+      COALESCE(pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn), 0) AS lag_bytes
+    FROM pg_replication_slots
+  master: true
+  metrics:
+    - slot_name:
+        usage: "LABEL"
+        description: "Replication slot name"
+    - slot_type:
+        usage: "LABEL"
+        description: "Slot type (logical/physical)"
+    - active:
+        usage: "GAUGE"
+        description: "Whether the slot is active (1) or not (0)"
+    - lag_bytes:
+        usage: "GAUGE"
+        description: "Replication lag in bytes (WAL position - confirmed flush)"
+

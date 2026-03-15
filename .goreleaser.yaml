@@ -16,13 +16,22 @@ before:
   hooks: []
 
 builds:
-  - builder: rust
+  - id: linux
+    builder: rust
     flags:
       - --release
       - -p={{ .ProjectName }}
     targets:
       - x86_64-unknown-linux-gnu
       - aarch64-unknown-linux-gnu
+
+  - id: macos
+    builder: rust
+    command: build
+    flags:
+      - --release
+      - -p={{ .ProjectName }}
+    targets:
       - aarch64-apple-darwin
 
 archives:

@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # pgsense-rs running locally (cargo run)
+  - job_name: pgsense
+    static_configs:
+      - targets: ["host.docker.internal:9090"]
+
+  # pgsense-rs running in Docker (--profile pgsense)
+  - job_name: pgsense-docker
+    static_configs:
+      - targets: ["pgsense:9090"]
+
+  # PostgreSQL metrics via postgres_exporter
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  # Container resource metrics (CPU, memory)
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]

@@ -16,7 +16,7 @@ services:
       - -c
       - max_wal_senders=4
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./postgres/docker-entrypoint-initdb.d/:/docker-entrypoint-initdb.d/:ro
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
@@ -24,5 +24,78 @@ services:
       timeout: 5s
       retries: 10
 
+  pgsense:
+    image: ghcr.io/mrehbr/pgsense-rs:latest
+    profiles: [pgsense]
+    command: ["scan", "-c", "/opt/pgsense/config.toml", "-r", "/opt/pgsense/rules.toml"]
+    volumes:
+      - ../config/bench.toml:/opt/pgsense/config.toml:ro
+      - ../config/rules.toml:/opt/pgsense/rules.toml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.16.0
+    profiles: [bench]
+    ports:
+      - "9187:9187"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable"
+    volumes:
+      - ./postgres-exporter/:/opt/postgres-exporter/:ro
+    command:
+      - --extend.query-path=/opt/postgres-exporter/queries.yaml
+      - --no-auto-discover-databases
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor:0.56
+    profiles: [bench]
+    ports:
+      - "8080:8080"
+    command:
+      - --docker_only=true
+      - --disable_metrics=percpu,sched,process,hugetlb,referenced_memory,resctrl,cpuset,advtcp,memory_numa,tcp,udp,disk,diskIO,network
+    volumes:
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    profiles: [bench]
+    ports:
+      - "9099:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - --config.file=/opt/prometheus/prometheus.yml
+    volumes:
+      - ./prometheus/:/opt/prometheus/:ro
+      - promdata:/prometheus
+    depends_on:
+      - postgres-exporter
+      - cadvisor
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    profiles: [bench]
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_PATHS_PROVISIONING: /opt/grafana/provisioning
+    volumes:
+      - ./grafana/:/opt/grafana/:ro
+      - grafanadata:/var/lib/grafana
+    depends_on:
+      - prometheus
+
 volumes:
   pgdata:
+  promdata:
+  grafanadata:

@@ -62,7 +62,8 @@
             typos
             git-cliff
             nur.repos.goreleaser.goreleaser
-            zig_0_13
+            zig_0_14
+            postgresql_18
             curl
             prek
           ];

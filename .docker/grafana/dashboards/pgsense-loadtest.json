@@ -1,0 +1,345 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "title": "Replication & Throughput",
+      "description": "Is pgsense keeping up with the write load?",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "title": "Replication Lag",
+      "description": "THE key metric. Flat near zero = pgsense keeps up. Growing = falling behind. This is all you need to watch during a test.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15, "gradientMode": "scheme" },
+          "color": { "mode": "continuous-GrYlRd" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1048576 },
+              { "color": "red", "value": 10485760 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "pg_replication_slot_lag_lag_bytes",
+          "legendFormat": "{{slot_name}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Throughput: PG writes vs pgsense reads",
+      "description": "Two lines should track each other. Gap between them = events piling up in the replication stream.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 10, "x": 8, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "PG inserts/sec" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "pgsense events/sec" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "rate(pg_stat_user_tables_n_tup_ins{relname=\"bench_sensitive\"}[1m])",
+          "legendFormat": "PG inserts/sec",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(pgsense_events_total[1m]))",
+          "legendFormat": "pgsense events/sec",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Scan latency (per event)",
+      "description": "How long pgsense takes to check one event against all rules. Under 1ms = fast. Above 10ms = detection engine may be the bottleneck.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 5 }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(pgsense_scan_duration_seconds_bucket[1m]))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(pgsense_scan_duration_seconds_bucket[1m]))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(pgsense_scan_duration_seconds_bucket[1m]))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "Resources & Queues",
+      "description": "Where's the bottleneck — CPU, memory, queue, or alert delivery?",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "collapsed": false
+    },
+    {
+      "title": "CPU (pgsense vs postgres)",
+      "description": "CPU cores used. If pgsense CPU is pegged at 1.0 while lag grows, it's CPU-bound — optimize rules or add concurrency.",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15 }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "pgsense" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "postgres" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "rate(container_cpu_usage_seconds_total{name=~\".*pgsense.*\"}[1m])",
+          "legendFormat": "pgsense",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(container_cpu_usage_seconds_total{name=~\".*postgres-1\"}[1m])",
+          "legendFormat": "postgres",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Memory RSS",
+      "description": "Physical memory used. If RSS keeps climbing under load, there may be a memory leak or unbounded caching.",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15 }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "pgsense" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "postgres" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "container_memory_rss{name=~\".*pgsense.*\"}",
+          "legendFormat": "pgsense",
+          "refId": "A"
+        },
+        {
+          "expr": "container_memory_rss{name=~\".*postgres-1\"}",
+          "legendFormat": "postgres",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Event queue depth",
+      "description": "Pending batches waiting to be scanned (max 256). Above zero = scanner is slower than the pipeline. At 256 = fully blocked, back-pressuring PG.",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 256,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20, "gradientMode": "scheme" },
+          "color": { "mode": "continuous-GrYlRd" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 128 },
+              { "color": "red", "value": 240 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "pgsense_queue_depth",
+          "legendFormat": "{{database}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Alert dispatch time",
+      "description": "Time to deliver alerts (only for events with findings). If this is high, alert channels (webhook/slack) are slowing the pipeline.",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 5 }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(pgsense_dispatch_duration_seconds_bucket[1m]))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(pgsense_dispatch_duration_seconds_bucket[1m]))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(pgsense_dispatch_duration_seconds_bucket[1m]))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "Details",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "collapsed": true,
+      "panels": [
+        {
+          "title": "Findings rate (by category)",
+          "type": "timeseries",
+          "gridPos": { "h": 7, "w": 8, "x": 0, "y": 18 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10 }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "expr": "sum by (category) (rate(pgsense_findings_total[1m]))",
+              "legendFormat": "{{category}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Alert delivery (by channel)",
+          "description": "Alert dispatch rate by channel and status. If error lines appear, alert channels are failing. Compare with dispatch latency to diagnose.",
+          "type": "timeseries",
+          "gridPos": { "h": 7, "w": 8, "x": 8, "y": 18 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "expr": "sum by (channel, status) (rate(pgsense_alerts_total[1m]))",
+              "legendFormat": "{{channel}} ({{status}})",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "title": "Batch size from pipeline",
+          "description": "Events per batch delivered by etl. Larger batches = more efficient processing.",
+          "type": "timeseries",
+          "gridPos": { "h": 7, "w": 8, "x": 16, "y": 18 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 5 }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, rate(pgsense_batch_size_bucket[1m]))",
+              "legendFormat": "p50",
+              "refId": "A"
+            },
+            {
+              "expr": "rate(pgsense_batch_size_sum[1m]) / rate(pgsense_batch_size_count[1m])",
+              "legendFormat": "mean",
+              "refId": "B"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0,
+        "includeAll": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": { "from": "now-15m", "to": "now" },
+  "title": "pgsense Load Test",
+  "uid": "pgsense-loadtest"
+}

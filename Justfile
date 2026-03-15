@@ -80,14 +80,26 @@ run +args="--help":
 
 ### Dev targets
 
-# Run dev environment
+# Run dev environment (--profile bench for observability stack)
 dev *opts:
-    @docker compose -f .docker/docker-compose.yaml up --wait
+    @docker compose -f .docker/docker-compose.yaml {{opts}} up --wait
 
 # Stop dev environment
-dev-stop:
-    @docker compose -f .docker/docker-compose.yaml stop
+dev-stop *opts:
+    @docker compose -f .docker/docker-compose.yaml {{opts}} stop
 
-dev-clean:
-    @docker compose -f .docker/docker-compose.yaml down -v --remove-orphans
+# Remove dev environment (volumes + orphans)
+dev-clean *opts:
+    @docker compose -f .docker/docker-compose.yaml {{opts}} down -v --remove-orphans
+
+### Bench targets
+
+# Run pgbench (sensitive=0..100 tps=500 duration=60 clients=4)
+pgbench sensitive="10" tps="500" duration="60" clients="4":
+    @PGPASSWORD=postgres pgbench \
+        -f .docker/pgbench/clean.sql@$((100 - {{sensitive}})) \
+        -f .docker/pgbench/sensitive.sql@{{sensitive}} \
+        -h localhost -p ${PG_PORT:-5432} -U postgres \
+        -c {{clients}} -j 2 -T {{duration}} -R {{tps}} -P 5 \
+        postgres
 
