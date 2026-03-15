@@ -102,6 +102,9 @@ impl Destination for ScannerDestination {
             }
         }
 
+        let depth = (self.event_tx.max_capacity() - self.event_tx.capacity()) as f64;
+        metrics::gauge!(crate::metrics::QUEUE_DEPTH, "database" => self.database.clone()).set(depth);
+
         Ok(())
     }
 }

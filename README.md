@@ -133,7 +133,7 @@ When `server.enabled = true`, an HTTP server exposes:
 | `/ready`   | Returns 200 once the pipeline is up  |
 | `/metrics` | Prometheus-format metrics            |
 
-**Exported metrics**: `pgsense_events_total`, `pgsense_findings_total` (category, severity), `pgsense_alerts_total` (channel, status), `pgsense_scan_duration_seconds`.
+**Exported metrics**: `pgsense_events_total`, `pgsense_findings_total` (category, severity), `pgsense_alerts_total` (channel, status), `pgsense_scan_duration_seconds`, `pgsense_batch_size`, `pgsense_queue_depth`, `pgsense_dispatch_duration_seconds`.
 
 ## Development
 

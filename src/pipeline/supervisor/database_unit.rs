@@ -141,8 +141,12 @@ impl DatabaseUnit {
     async fn scan_loop(mut event_rx: mpsc::Receiver<Vec<ScanEvent>>, scanner: &ArcSwap<Scanner>, dispatcher: &Dispatcher) {
         while let Some(events) = event_rx.recv().await {
             let scanner = scanner.load();
+            let batch_len = events.len();
+
+            let mut db = String::new();
             for event in &events {
                 let start = std::time::Instant::now();
+                db.clone_from(&event.database);
                 metrics::counter!(crate::metrics::EVENTS_TOTAL, "database" => event.database.clone()).increment(1);
 
                 let findings = scanner.scan(event);
@@ -158,10 +162,15 @@ impl DatabaseUnit {
 
                 metrics::histogram!(crate::metrics::SCAN_DURATION, "database" => event.database.clone()).record(start.elapsed());
 
-                for finding in &findings {
-                    dispatcher.dispatch(finding).await;
+                if !findings.is_empty() {
+                    let dispatch_start = std::time::Instant::now();
+                    for finding in &findings {
+                        dispatcher.dispatch(finding).await;
+                    }
+                    metrics::histogram!(crate::metrics::DISPATCH_DURATION, "database" => event.database.clone()).record(dispatch_start.elapsed());
                 }
             }
+            metrics::histogram!(crate::metrics::BATCH_SIZE, "database" => db).record(batch_len as f64);
         }
     }
 }
