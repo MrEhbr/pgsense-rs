@@ -6,10 +6,11 @@ use etl::{
     types::{Event, TableId, TableRow},
 };
 use tokio::sync::{RwLock, mpsc};
-use tracing::{debug, trace};
+use tracing::{debug, info, trace};
 
 use crate::{
     events::{ColumnMeta, ScanEvent, TableMeta, extract_scan_events},
+    metrics,
     scanner::ScanFilter,
 };
 
@@ -28,6 +29,15 @@ pub struct ScannerDestination {
 
 impl ScannerDestination {
     pub fn new(database: String, filter: ScanFilter, event_tx: mpsc::Sender<Vec<ScanEvent>>, table_registry: TableRegistry) -> Self {
+        if !filter.include_schemas.is_empty() || !filter.exclude_tables.is_empty() || !filter.exclude_columns.is_empty() {
+            info!(
+                database = %database,
+                include_schemas = ?filter.include_schemas,
+                exclude_tables = ?filter.exclude_tables,
+                exclude_columns = ?filter.exclude_columns,
+                "scan filter active"
+            );
+        }
         Self {
             database,
             filter,
@@ -87,7 +97,21 @@ impl Destination for ScannerDestination {
 
         let scan_events: Vec<ScanEvent> = scan_events
             .into_iter()
-            .filter(|e| self.filter.matches_schema(&e.schema_name) && self.filter.matches_table(&e.table_name))
+            .filter(|e| {
+                if !self.filter.matches_schema(&e.schema_name) {
+                    metrics::EVENTS_SKIPPED
+                        .with_label_values(&[&self.database, "schema_excluded"])
+                        .inc();
+                    return false;
+                }
+                if !self.filter.matches_table(&e.table_name) {
+                    metrics::EVENTS_SKIPPED
+                        .with_label_values(&[&self.database, "table_excluded"])
+                        .inc();
+                    return false;
+                }
+                true
+            })
             .map(|mut e| {
                 e.columns
                     .retain(|c| self.filter.should_include_column(&c.name));
@@ -102,8 +126,10 @@ impl Destination for ScannerDestination {
             }
         }
 
-        let depth = (self.event_tx.max_capacity() - self.event_tx.capacity()) as f64;
-        metrics::gauge!(crate::metrics::QUEUE_DEPTH, "database" => self.database.clone()).set(depth);
+        let depth = (self.event_tx.max_capacity() - self.event_tx.capacity()) as i64;
+        metrics::QUEUE_DEPTH
+            .with_label_values(&[&self.database])
+            .set(depth);
 
         Ok(())
     }

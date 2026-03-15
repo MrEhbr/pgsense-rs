@@ -7,15 +7,15 @@ use std::{
 };
 
 use axum::{Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
-use metrics_exporter_prometheus::PrometheusHandle;
 use serde::Serialize;
 use tokio::net::TcpListener;
 use tracing::info;
 
+use crate::metrics;
+
 #[derive(Clone)]
 pub struct ServerState {
     pub ready: Arc<AtomicBool>,
-    pub metrics_handle: PrometheusHandle,
 }
 
 #[derive(Serialize)]
@@ -38,11 +38,11 @@ async fn readiness(State(state): State<ServerState>) -> impl IntoResponse {
     }
 }
 
-async fn metrics_handler(State(state): State<ServerState>) -> impl IntoResponse {
+async fn metrics_handler() -> impl IntoResponse {
     (
         StatusCode::OK,
         [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
-        state.metrics_handle.render(),
+        metrics::render(),
     )
 }
 
@@ -62,15 +62,11 @@ pub async fn start(addr: SocketAddr, state: ServerState) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use metrics_exporter_prometheus::PrometheusBuilder;
-
     use super::*;
 
     fn test_state(ready: bool) -> ServerState {
-        let recorder = PrometheusBuilder::new().build_recorder();
         ServerState {
             ready: Arc::new(AtomicBool::new(ready)),
-            metrics_handle: recorder.handle(),
         }
     }
 

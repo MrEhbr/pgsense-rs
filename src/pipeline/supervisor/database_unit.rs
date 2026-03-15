@@ -15,6 +15,7 @@ use super::{ExitSignal, PipelineStatus};
 use crate::{
     alerts::dispatcher::Dispatcher,
     events::ScanEvent,
+    metrics,
     pipeline::{
         config::{DatabaseConfig, PipelineSettings},
         runner::PipelineRunner,
@@ -84,21 +85,28 @@ impl DatabaseUnit {
 
         let status = self.status.clone();
         let database = self.database_id.clone();
+        metrics::PIPELINE_CONNECTED
+            .with_label_values(&[&database])
+            .set(1);
         tokio::spawn(async move {
             loop {
                 tokio::select! {
                     result = runner.wait() => {
                         match result {
                             Ok(()) => {
+                                metrics::PIPELINE_CONNECTED.with_label_values(&[&database]).set(0);
                                 status.store(PipelineStatus::Exited as u8, Ordering::Relaxed);
                                 info!(database = %database, "pipeline exited normally");
                                 let _ = exit_tx.send((database, Ok(()))).await;
                                 return;
                             },
                             Err(e) => {
+                                metrics::PIPELINE_CONNECTED.with_label_values(&[&database]).set(0);
+                                metrics::PIPELINE_RECONNECTS.with_label_values(&[&database]).inc();
                                 warn!(database = %database, error = %e, "pipeline failed, attempting reconnect");
                                 match runner.reconnect().await {
                                     Ok(()) => {
+                                        metrics::PIPELINE_CONNECTED.with_label_values(&[&database]).set(1);
                                         info!(database = %database, "pipeline reconnected");
                                         tokio::time::sleep(Duration::from_secs(1)).await;
                                         continue;
@@ -114,8 +122,8 @@ impl DatabaseUnit {
                     }
                     result = shutdown_rx.changed() => {
                         if result.is_err() {
-                            // Sender dropped without explicit signal — abnormal exit
                             warn!(database = %database, "shutdown channel closed unexpectedly");
+                            metrics::PIPELINE_CONNECTED.with_label_values(&[&database]).set(0);
                             status.store(PipelineStatus::Exited as u8, Ordering::Relaxed);
                             return;
                         }
@@ -125,6 +133,7 @@ impl DatabaseUnit {
                             Err(_) => warn!(database = %database, "pipeline shutdown timed out after 30s"),
                             Ok(Ok(())) => {}
                         }
+                        metrics::PIPELINE_CONNECTED.with_label_values(&[&database]).set(0);
                         status.store(PipelineStatus::Exited as u8, Ordering::Relaxed);
                         info!(database = %database, "pipeline shut down");
                         let _ = exit_tx.send((database, Ok(()))).await;
@@ -142,35 +151,41 @@ impl DatabaseUnit {
         while let Some(events) = event_rx.recv().await {
             let scanner = scanner.load();
             let batch_len = events.len();
+            let batch_db = events
+                .first()
+                .map(|e| e.database.clone())
+                .unwrap_or_default();
 
-            let mut db = String::new();
             for event in &events {
                 let start = std::time::Instant::now();
-                db.clone_from(&event.database);
-                metrics::counter!(crate::metrics::EVENTS_TOTAL, "database" => event.database.clone()).increment(1);
+                metrics::EVENTS_TOTAL
+                    .with_label_values(&[&event.database])
+                    .inc();
 
                 let findings = scanner.scan(event);
                 for finding in &findings {
-                    metrics::counter!(
-                        crate::metrics::FINDINGS_TOTAL,
-                        "database" => finding.database.clone(),
-                        "category" => finding.category.clone(),
-                        "severity" => finding.severity.to_string(),
-                    )
-                    .increment(1);
+                    metrics::FINDINGS_TOTAL
+                        .with_label_values(&[&finding.database, &finding.category, &finding.severity.to_string()])
+                        .inc();
                 }
 
-                metrics::histogram!(crate::metrics::SCAN_DURATION, "database" => event.database.clone()).record(start.elapsed());
+                metrics::SCAN_DURATION
+                    .with_label_values(&[&event.database])
+                    .observe(start.elapsed().as_secs_f64());
 
                 if !findings.is_empty() {
                     let dispatch_start = std::time::Instant::now();
                     for finding in &findings {
                         dispatcher.dispatch(finding).await;
                     }
-                    metrics::histogram!(crate::metrics::DISPATCH_DURATION, "database" => event.database.clone()).record(dispatch_start.elapsed());
+                    metrics::DISPATCH_DURATION
+                        .with_label_values(&[&event.database])
+                        .observe(dispatch_start.elapsed().as_secs_f64());
                 }
             }
-            metrics::histogram!(crate::metrics::BATCH_SIZE, "database" => db).record(batch_len as f64);
+            metrics::BATCH_SIZE
+                .with_label_values(&[&batch_db])
+                .observe(batch_len as f64);
         }
     }
 }

@@ -7,7 +7,7 @@ use super::{
     AlertChannel, config::AlertsConfig, dedup::Deduplicator, jsonl::JsonlChannel, log::LogChannel, postgres::PostgresChannel, slack::SlackChannel,
     stdout::StdoutChannel, webhook::WebhookChannel,
 };
-use crate::scanner::Finding;
+use crate::{metrics, scanner::Finding};
 
 struct NamedChannel {
     name: String,
@@ -96,6 +96,9 @@ impl Dispatcher {
     /// fans out to all channels (backward compatible).
     pub async fn dispatch(&self, finding: &Finding) {
         if !self.dedup.should_alert(finding) {
+            metrics::DEDUP_TOTAL
+                .with_label_values(&[&finding.database, "suppressed"])
+                .inc();
             debug!(
                 rule_id = %finding.rule_id,
                 table = %finding.table_name,
@@ -104,6 +107,9 @@ impl Dispatcher {
             );
             return;
         }
+        metrics::DEDUP_TOTAL
+            .with_label_values(&[&finding.database, "passed"])
+            .inc();
 
         for nc in &self.channels {
             if let Some(ref allowed) = finding.channels
@@ -113,10 +119,14 @@ impl Dispatcher {
             }
             match nc.channel.send(finding).await {
                 Ok(()) => {
-                    metrics::counter!(crate::metrics::ALERTS_TOTAL, "channel" => nc.name.clone(), "status" => "ok").increment(1);
+                    metrics::ALERTS_TOTAL
+                        .with_label_values(&[&nc.name, "ok"])
+                        .inc();
                 },
                 Err(e) => {
-                    metrics::counter!(crate::metrics::ALERTS_TOTAL, "channel" => nc.name.clone(), "status" => "error").increment(1);
+                    metrics::ALERTS_TOTAL
+                        .with_label_values(&[&nc.name, "error"])
+                        .inc();
                     error!(
                         channel = %nc.name,
                         error = %e,

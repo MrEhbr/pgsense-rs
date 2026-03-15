@@ -16,6 +16,7 @@ use tracing::{info, warn};
 use crate::{
     alerts::dispatcher::Dispatcher,
     config::Config,
+    metrics,
     pipeline::supervisor::Supervisor,
     rules::{config::RuleConfig, engine::RuleEngine},
     scanner::Scanner,
@@ -41,15 +42,12 @@ pub async fn run(args: Args) -> Result<()> {
     config.validate().context("invalid configuration")?;
     let _guard = crate::logging::setup(&config.log).context("failed to initialize logging")?;
 
-    let metrics_handle = crate::metrics::init();
+    metrics::init();
     let ready = Arc::new(AtomicBool::new(false));
 
     if config.server.enabled {
         let addr = SocketAddr::from(([0, 0, 0, 0], config.server.port));
-        let state = ServerState {
-            ready: ready.clone(),
-            metrics_handle,
-        };
+        let state = ServerState { ready: ready.clone() };
         tokio::spawn(async move {
             if let Err(e) = crate::server::start(addr, state).await {
                 tracing::error!(error = %e, "HTTP server failed");
@@ -63,6 +61,7 @@ pub async fn run(args: Args) -> Result<()> {
         .or(config.rules_file.as_deref())
         .context("no rules file specified — use --rules <FILE> or set rules_file in config")?;
     let (scanner, rules) = build_scanner(rules_path)?;
+    metrics::RULES_LOADED.set(scanner.rule_count() as i64);
     let scanner = Arc::new(ArcSwap::from_pointee(scanner));
 
     let dispatcher = Dispatcher::from_config(&config.alerts)
@@ -104,10 +103,13 @@ pub async fn run(args: Args) -> Result<()> {
                 match build_scanner(&rules_path) {
                     Ok((new_scanner, new_rules)) => {
                         dispatcher.validate_channel_routing(&new_rules);
+                        metrics::RULES_LOADED.set(new_scanner.rule_count() as i64);
+                        metrics::CONFIG_RELOADS.with_label_values(&["ok"]).inc();
                         info!(rules = new_scanner.rule_count(), path = %rules_path.display(), "rules hot-reloaded");
                         scanner.store(Arc::new(new_scanner));
                     }
                     Err(e) => {
+                        metrics::CONFIG_RELOADS.with_label_values(&["error"]).inc();
                         warn!(error = %e, path = %rules_path.display(), "failed to reload rules — keeping previous rules");
                     }
                 }
@@ -128,10 +130,27 @@ pub async fn run(args: Args) -> Result<()> {
 
 fn build_scanner(rules_path: &Path) -> Result<(Scanner, Vec<RuleConfig>)> {
     let rules = crate::config::load_rules(rules_path).context("failed to load rules")?;
-    info!(rules = rules.len(), path = %rules_path.display(), "rules loaded");
+    let start = std::time::Instant::now();
     let engine = RuleEngine::new(&rules).context("failed to compile detection rules")?;
+    let elapsed = start.elapsed();
     let scanner = Scanner::new(engine);
-    info!(rules = scanner.rule_count(), "detection engine ready");
+
+    let (regex, builtin, script) = rules
+        .iter()
+        .fold((0u32, 0u32, 0u32), |(r, b, s), rule| match rule.rule_type {
+            crate::rules::config::RuleType::Regex => (r + 1, b, s),
+            crate::rules::config::RuleType::Builtin => (r, b + 1, s),
+            crate::rules::config::RuleType::Script => (r, b, s + 1),
+        });
+    info!(
+        total = scanner.rule_count(),
+        regex,
+        builtin,
+        script,
+        compile_ms = elapsed.as_millis(),
+        path = %rules_path.display(),
+        "detection engine ready"
+    );
     Ok((scanner, rules))
 }
 

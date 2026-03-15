@@ -2,13 +2,14 @@ use std::collections::HashSet;
 
 use anyhow::{Context, Result};
 use regex::{Regex, RegexSet};
-use tracing::debug;
+use tracing::{debug, warn};
 
 use super::{
     config::{RuleConfig, RuleScope, RuleType, Severity, Validator},
     detectors::Detector,
     script, validators,
 };
+use crate::metrics;
 
 pub struct RuleMetadata {
     pub id: String,
@@ -198,21 +199,29 @@ impl RuleEngine {
 
         // Phase 3: Script rules
         for rule in &self.rules {
-            if let RuleKind::Script { ref ast } = rule.kind
-                && let Ok(matches) = script::run_detect(&self.script_engine, ast, value)
-            {
-                for matched_text in matches {
-                    if rule
-                        .allowlist
-                        .as_ref()
-                        .is_some_and(|al| al.is_allowed(&rule.meta.id, &matched_text))
-                    {
-                        continue;
-                    }
-                    results.push(RuleMatch {
-                        rule: &rule.meta,
-                        matched_text,
-                    });
+            if let RuleKind::Script { ref ast } = rule.kind {
+                match script::run_detect(&self.script_engine, ast, value) {
+                    Ok(matches) => {
+                        for matched_text in matches {
+                            if rule
+                                .allowlist
+                                .as_ref()
+                                .is_some_and(|al| al.is_allowed(&rule.meta.id, &matched_text))
+                            {
+                                continue;
+                            }
+                            results.push(RuleMatch {
+                                rule: &rule.meta,
+                                matched_text,
+                            });
+                        }
+                    },
+                    Err(e) => {
+                        metrics::SCRIPT_ERRORS
+                            .with_label_values(&[&rule.meta.id])
+                            .inc();
+                        warn!(rule_id = %rule.meta.id, error = %e, "script rule execution failed");
+                    },
                 }
             }
         }

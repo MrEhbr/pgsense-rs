@@ -31,7 +31,6 @@ tokio = { version = "1", features = ["full"] }
 
 # Pipeline
 etl = { git = "https://github.com/supabase/etl", rev = "4f1141e" }
-etl-config = { git = "https://github.com/supabase/etl", rev = "4f1141e" }
 etl-postgres = { git = "https://github.com/supabase/etl", rev = "4f1141e" }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "postgres", "migrate", "json"] }
 
@@ -55,8 +54,8 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 
 # Observability
 console-subscriber = { version = "0.5", optional = true }
-metrics = "0.24"
-metrics-exporter-prometheus = { version = "0.16", default-features = false, features = ["http-listener"] }
+lazy_static = "1"
+prometheus = { version = "0.13", default-features = false, features = ["process"] }
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
