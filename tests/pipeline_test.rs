@@ -13,6 +13,13 @@ use secrecy::SecretString;
 use support::PgContainer;
 use tokio::{sync::mpsc, time::timeout};
 
+async fn insert_marker(client: &tokio_postgres::Client, val: &str) {
+    client
+        .execute("INSERT INTO test_data (col_a, col_b) VALUES ($1, $2)", &[&val, &"row"])
+        .await
+        .expect("insert marker row");
+}
+
 async fn test_insert_events(db_cfg: &DatabaseConfig, client: &tokio_postgres::Client, settings: &PipelineSettings) {
     let (event_tx, mut event_rx) = mpsc::channel(1024);
     let mut runner = PipelineRunner::new(1, db_cfg, settings, event_tx)
@@ -216,14 +223,11 @@ async fn two_pipelines_merge_events_from_two_databases() {
     runner2.start().await.expect("start runner2");
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    client1
-        .execute("INSERT INTO test_data (col_a, col_b) VALUES ($1, $2)", &[&"from-db1", &"row1"])
-        .await
-        .expect("insert into db1");
-    client2
-        .execute("INSERT INTO test_data (col_a, col_b) VALUES ($1, $2)", &[&"from-db2", &"row2"])
-        .await
-        .expect("insert into db2");
+    // Insert into both databases. Under heavy parallel load, the replication
+    // slot for db2 may not be ready yet — the recv loop below retries the
+    // insert on timeout to handle this race.
+    insert_marker(&client1, "from-db1").await;
+    insert_marker(&client2, "from-db2").await;
 
     let mut found_db1 = false;
     let mut found_db2 = false;
@@ -247,7 +251,16 @@ async fn two_pipelines_merge_events_from_two_databases() {
                     }
                 }
             },
-            Ok(None) | Err(_) => break,
+            Ok(None) => break,
+            Err(_) => {
+                // Replication slot may not have been ready; re-insert
+                if !found_db1 {
+                    insert_marker(&client1, "from-db1").await;
+                }
+                if !found_db2 {
+                    insert_marker(&client2, "from-db2").await;
+                }
+            },
         }
     }
 
