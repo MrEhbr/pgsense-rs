@@ -61,7 +61,7 @@ deps:
 
 # Run benchmarks (skip unit tests, filter outlier messages)
 bench *opts="":
-    @cargo criterion --workspace --output-format quiet {{opts}}
+    @cargo criterion --workspace --output-format criterion {{opts}}
 
 # Run a fuzz target
 [arg("duration", short="d", long="duration")]

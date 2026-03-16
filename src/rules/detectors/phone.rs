@@ -1,7 +1,6 @@
-use phonenumber::metadata::DATABASE;
-
 use crate::rules::validators;
 
+#[allow(non_snake_case)] // rust-analyzer false positive: `None` in match arm is a pattern, not a variable
 pub(super) fn scan(value: &str) -> Vec<String> {
     let bytes = value.as_bytes();
     let mut results = Vec::new();
@@ -30,18 +29,16 @@ pub(super) fn scan(value: &str) -> Vec<String> {
     results
 }
 
-/// Collect digits + separators, then validate against known country codes.
+/// Collect digits + separators, then validate via parse + validity check.
 /// Handles both E.164 (`+` prefix) and `00` dial prefix.
 fn parse_international(bytes: &[u8], value: &str, match_start: usize, digit_start: usize) -> Option<(usize, String)> {
-    let mut digits = [0u8; 15];
     let mut count = 0;
     let mut j = digit_start;
     let mut end = digit_start;
 
     while j < bytes.len() && count < 15 {
         match bytes[j] {
-            b @ b'0'..=b'9' => {
-                digits[count] = b - b'0';
+            b'0'..=b'9' => {
                 count += 1;
                 j += 1;
                 end = j;
@@ -52,20 +49,6 @@ fn parse_international(bytes: &[u8], value: &str, match_start: usize, digit_star
     }
 
     if !(7..=15).contains(&count) || bytes.get(end).is_some_and(|b| b.is_ascii_alphanumeric()) {
-        return None;
-    }
-
-    let has_valid_cc = (1usize..=3).any(|len| {
-        if count < len {
-            return false;
-        }
-        let cc: u16 = digits[..len]
-            .iter()
-            .fold(0u16, |acc, &d| acc * 10 + d as u16);
-        lookup_country_code(cc).is_some_and(|(min, max)| (min as usize..=max as usize).contains(&(count - len)))
-    });
-
-    if !has_valid_cc {
         return None;
     }
 
@@ -114,33 +97,6 @@ fn parse_nanp(bytes: &[u8], value: &str, start: usize) -> Option<(usize, String)
 
     let candidate = &value[start..end];
     validators::phone(candidate).then(|| (end, candidate.to_string()))
-}
-
-fn lookup_country_code(cc: u16) -> Option<(u8, u8)> {
-    let regions = DATABASE.by_code(&cc)?;
-    let meta = regions.first()?;
-    let d = meta.descriptors();
-
-    let all_lengths = [
-        d.fixed_line(),
-        d.mobile(),
-        d.toll_free(),
-        d.premium_rate(),
-        d.shared_cost(),
-        d.voip(),
-        d.personal_number(),
-        d.pager(),
-        d.uan(),
-    ]
-    .into_iter()
-    .flatten()
-    .flat_map(|desc| desc.possible_length().iter().copied());
-
-    let (min, max) = all_lengths.fold((u16::MAX, 0u16), |(lo, hi), len| (lo.min(len), hi.max(len)));
-    if min > max {
-        return None;
-    }
-    Some((min as u8, max as u8))
 }
 
 #[cfg(test)]
@@ -217,27 +173,6 @@ mod tests {
     #[case("(212) 234-5678", &["(212) 234-5678"])] // valid
     fn nanp_digit_constraints(#[case] input: &str, #[case] expected: &[&str]) {
         assert_eq!(scan(input), expected);
-    }
-
-    #[test]
-    fn lookup_known_country_code() {
-        let uk = lookup_country_code(44);
-        assert!(uk.is_some());
-        let (min, max) = uk.unwrap();
-        assert!(min <= 10 && max >= 10, "UK should accept 10-digit numbers: ({min}, {max})");
-
-        let us = lookup_country_code(1);
-        assert!(us.is_some());
-        let (min, max) = us.unwrap();
-        assert_eq!((min, max), (10, 10), "US national numbers are always 10 digits");
-
-        let cn = lookup_country_code(86);
-        assert!(cn.is_some());
-    }
-
-    #[test]
-    fn lookup_unknown_country_code() {
-        assert_eq!(lookup_country_code(999), None);
     }
 
     #[test]

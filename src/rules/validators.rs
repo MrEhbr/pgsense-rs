@@ -30,18 +30,20 @@ pub fn luhn(s: &str) -> bool {
     sum.is_multiple_of(10)
 }
 
-/// Validate a phone number using libphonenumber.
+/// Validate a phone number via parse + validity check.
 /// Handles E.164 (`+` prefix), `00` dial prefix, and bare NANP numbers.
 pub fn phone(s: &str) -> bool {
+    use rlibphonenumber::PHONE_NUMBER_UTIL;
+
     if s.starts_with('+') {
-        phonenumber::parse(None, s)
+        PHONE_NUMBER_UTIL.parse(s)
     } else if let Some(rest) = s.strip_prefix("00") {
-        phonenumber::parse(None, format!("+{rest}"))
+        PHONE_NUMBER_UTIL.parse(format!("+{rest}"))
     } else {
         // Bare NANP — US covers all NANP regions (US, CA, Caribbean share CC 1)
-        phonenumber::parse(Some(phonenumber::country::US), s)
+        PHONE_NUMBER_UTIL.parse_with_default_region(s, "US")
     }
-    .is_ok_and(|n| phonenumber::is_valid(&n))
+    .is_ok_and(|n| n.is_valid())
 }
 
 /// Validate a US Social Security Number format and check for invalid ranges.
