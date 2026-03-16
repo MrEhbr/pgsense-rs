@@ -11,7 +11,7 @@ setup:
     @cargo install --locked prek
     @prek install
     @cargo install cargo-llvm-cov --locked
-    @cargo install cargo-afl --locked
+    @cargo install cargo-afl
     @cargo afl config --build --force
     @echo "✓ Development tools installed"
 
@@ -63,7 +63,7 @@ deps:
 bench *opts="":
     @cargo criterion --workspace --output-format quiet {{opts}}
 
-# Run a fuzz target 
+# Run a fuzz target
 [arg("duration", short="d", long="duration")]
 fuzz target duration="0":
     cd fuzz && cargo afl build
@@ -102,4 +102,3 @@ pgbench sensitive="10" tps="500" duration="60" clients="4":
         -h localhost -p ${PG_PORT:-5432} -U postgres \
         -c {{clients}} -j 2 -T {{duration}} -R {{tps}} -P 5 \
         postgres
-

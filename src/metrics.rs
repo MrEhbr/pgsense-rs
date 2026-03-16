@@ -1,70 +1,91 @@
-use lazy_static::lazy_static;
+use std::sync::LazyLock;
+
 use prometheus::{
     Encoder, HistogramOpts, HistogramVec, IntCounterVec, IntGauge, IntGaugeVec, TextEncoder, register_histogram_vec, register_int_counter_vec,
     register_int_gauge, register_int_gauge_vec,
 };
 
-lazy_static! {
-    pub static ref EVENTS_TOTAL: IntCounterVec =
-        register_int_counter_vec!("pgsense_events_total", "Total replication events processed", &["database"]).unwrap();
-    pub static ref FINDINGS_TOTAL: IntCounterVec = register_int_counter_vec!(
+pub static EVENTS_TOTAL: LazyLock<IntCounterVec> =
+    LazyLock::new(|| register_int_counter_vec!("pgsense_events_total", "Total replication events processed", &["database"]).unwrap());
+pub static FINDINGS_TOTAL: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
         "pgsense_findings_total",
         "Total sensitive data findings",
         &["database", "category", "severity"]
     )
-    .unwrap();
-    pub static ref ALERTS_TOTAL: IntCounterVec = register_int_counter_vec!("pgsense_alerts_total", "Total alerts dispatched", &["channel", "status"]).unwrap();
-    pub static ref PIPELINE_RECONNECTS: IntCounterVec = register_int_counter_vec!(
+    .unwrap()
+});
+pub static ALERTS_TOTAL: LazyLock<IntCounterVec> =
+    LazyLock::new(|| register_int_counter_vec!("pgsense_alerts_total", "Total alerts dispatched", &["channel", "status"]).unwrap());
+pub static PIPELINE_RECONNECTS: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
         "pgsense_pipeline_reconnects_total",
         "Total pipeline reconnection attempts",
         &["database"]
     )
-    .unwrap();
-    pub static ref EVENTS_SKIPPED: IntCounterVec = register_int_counter_vec!(
+    .unwrap()
+});
+pub static EVENTS_SKIPPED: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
         "pgsense_events_skipped_total",
         "Total events skipped by scan filters",
         &["database", "reason"]
     )
-    .unwrap();
-    pub static ref DEDUP_TOTAL: IntCounterVec =
-        register_int_counter_vec!("pgsense_dedup_total", "Total deduplication decisions", &["database", "outcome"]).unwrap();
-    pub static ref CONFIG_RELOADS: IntCounterVec = register_int_counter_vec!(
+    .unwrap()
+});
+pub static DEDUP_TOTAL: LazyLock<IntCounterVec> =
+    LazyLock::new(|| register_int_counter_vec!("pgsense_dedup_total", "Total deduplication decisions", &["database", "outcome"]).unwrap());
+pub static CONFIG_RELOADS: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
         "pgsense_config_reloads_total",
         "Total configuration reload attempts",
         &["status"]
     )
-    .unwrap();
-    pub static ref SCRIPT_ERRORS: IntCounterVec = register_int_counter_vec!(
+    .unwrap()
+});
+pub static SCRIPT_ERRORS: LazyLock<IntCounterVec> = LazyLock::new(|| {
+    register_int_counter_vec!(
         "pgsense_script_errors_total",
         "Total Rhai script execution errors",
         &["rule_id"]
     )
-    .unwrap();
-    pub static ref RULES_LOADED: IntGauge = register_int_gauge!("pgsense_rules_loaded", "Number of detection rules currently loaded").unwrap();
-    pub static ref PIPELINE_CONNECTED: IntGaugeVec = register_int_gauge_vec!(
+    .unwrap()
+});
+pub static RULES_LOADED: LazyLock<IntGauge> =
+    LazyLock::new(|| register_int_gauge!("pgsense_rules_loaded", "Number of detection rules currently loaded").unwrap());
+pub static PIPELINE_CONNECTED: LazyLock<IntGaugeVec> = LazyLock::new(|| {
+    register_int_gauge_vec!(
         "pgsense_pipeline_connected",
         "Whether a database pipeline is connected (1) or disconnected (0)",
         &["database"]
     )
-    .unwrap();
-    pub static ref QUEUE_DEPTH: IntGaugeVec = register_int_gauge_vec!(
+    .unwrap()
+});
+pub static QUEUE_DEPTH: LazyLock<IntGaugeVec> = LazyLock::new(|| {
+    register_int_gauge_vec!(
         "pgsense_queue_depth",
         "Current depth of the event channel (pending batches)",
         &["database"]
     )
-    .unwrap();
-    pub static ref SCAN_DURATION: HistogramVec = register_histogram_vec!(
+    .unwrap()
+});
+pub static SCAN_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
+    register_histogram_vec!(
         HistogramOpts::new("pgsense_scan_duration_seconds", "Time spent scanning a single event").buckets(vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1]),
         &["database"]
     )
-    .unwrap();
-    pub static ref BATCH_SIZE: HistogramVec = register_histogram_vec!(
+    .unwrap()
+});
+pub static BATCH_SIZE: LazyLock<HistogramVec> = LazyLock::new(|| {
+    register_histogram_vec!(
         HistogramOpts::new("pgsense_batch_size", "Number of events per batch from the pipeline")
             .buckets(vec![1.0, 5.0, 10.0, 50.0, 100.0, 250.0, 500.0, 1000.0]),
         &["database"]
     )
-    .unwrap();
-    pub static ref DISPATCH_DURATION: HistogramVec = register_histogram_vec!(
+    .unwrap()
+});
+pub static DISPATCH_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
+    register_histogram_vec!(
         HistogramOpts::new(
             "pgsense_dispatch_duration_seconds",
             "Time spent dispatching alerts for a single event"
@@ -72,24 +93,26 @@ lazy_static! {
         .buckets(vec![0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0]),
         &["database"]
     )
-    .unwrap();
-}
+    .unwrap()
+});
 
 pub fn init() {
-    lazy_static::initialize(&EVENTS_TOTAL);
-    lazy_static::initialize(&FINDINGS_TOTAL);
-    lazy_static::initialize(&ALERTS_TOTAL);
-    lazy_static::initialize(&PIPELINE_RECONNECTS);
-    lazy_static::initialize(&EVENTS_SKIPPED);
-    lazy_static::initialize(&DEDUP_TOTAL);
-    lazy_static::initialize(&CONFIG_RELOADS);
-    lazy_static::initialize(&SCRIPT_ERRORS);
-    lazy_static::initialize(&RULES_LOADED);
-    lazy_static::initialize(&PIPELINE_CONNECTED);
-    lazy_static::initialize(&QUEUE_DEPTH);
-    lazy_static::initialize(&SCAN_DURATION);
-    lazy_static::initialize(&BATCH_SIZE);
-    lazy_static::initialize(&DISPATCH_DURATION);
+    // Force initialization of all metrics so they appear in /metrics before first
+    // use
+    let _ = &*EVENTS_TOTAL;
+    let _ = &*FINDINGS_TOTAL;
+    let _ = &*ALERTS_TOTAL;
+    let _ = &*PIPELINE_RECONNECTS;
+    let _ = &*EVENTS_SKIPPED;
+    let _ = &*DEDUP_TOTAL;
+    let _ = &*CONFIG_RELOADS;
+    let _ = &*SCRIPT_ERRORS;
+    let _ = &*RULES_LOADED;
+    let _ = &*PIPELINE_CONNECTED;
+    let _ = &*QUEUE_DEPTH;
+    let _ = &*SCAN_DURATION;
+    let _ = &*BATCH_SIZE;
+    let _ = &*DISPATCH_DURATION;
 
     #[cfg(target_os = "linux")]
     {

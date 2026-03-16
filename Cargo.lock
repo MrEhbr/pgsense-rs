@@ -2305,7 +2305,6 @@ dependencies = [
  "criterion",
  "etl",
  "etl-postgres",
- "lazy_static",
  "notify",
  "phonenumber",
  "predicates",
