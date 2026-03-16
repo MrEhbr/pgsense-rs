@@ -46,37 +46,30 @@ pub fn phone(s: &str) -> bool {
 
 /// Validate a US Social Security Number format and check for invalid ranges.
 /// Accepts `XXX-XX-XXXX`, `XXX XX XXXX`, and `XXX.XX.XXXX` formats.
+/// SSN is always 11 ASCII characters, so we index bytes directly.
 pub fn ssn(s: &str) -> bool {
-    let sep = match s.chars().nth(3) {
-        Some(c @ ('-' | ' ' | '.')) => c,
-        _ => return false,
-    };
-    let parts: Vec<&str> = s.split(sep).collect();
-    if parts.len() != 3 {
+    let b = s.as_bytes();
+    if b.len() != 11 {
         return false;
     }
 
-    let area: u16 = match parts[0].parse() {
-        Ok(n) => n,
-        Err(_) => return false,
-    };
-    let group: u16 = match parts[1].parse() {
-        Ok(n) => n,
-        Err(_) => return false,
-    };
-    let serial: u16 = match parts[2].parse() {
-        Ok(n) => n,
-        Err(_) => return false,
-    };
+    let sep = b[3];
+    if !matches!(sep, b'-' | b' ' | b'.') {
+        return false;
+    }
+    if b[6] != sep {
+        return false;
+    }
+
+    let Ok(area) = s[0..3].parse::<u16>() else { return false };
+    let Ok(group) = s[4..6].parse::<u16>() else { return false };
+    let Ok(serial) = s[7..11].parse::<u16>() else { return false };
 
     // Invalid: area 000, 666, or 900-999
     if area == 0 || area == 666 || area >= 900 {
         return false;
     }
-    if group == 0 {
-        return false;
-    }
-    if serial == 0 {
+    if group == 0 || serial == 0 {
         return false;
     }
 

@@ -62,7 +62,7 @@ impl Destination for ScannerDestination {
 
     async fn write_events(&self, events: Vec<Event>) -> EtlResult<()> {
         {
-            let mut registry: HashMap<TableId, TableMeta> = self.table_registry.write().await.clone();
+            let mut registry = self.table_registry.write().await;
             for event in &events {
                 if let Event::Relation(rel) = event {
                     let meta = TableMeta {
@@ -89,7 +89,6 @@ impl Destination for ScannerDestination {
                     registry.insert(rel.table_schema.id, meta);
                 }
             }
-            *self.table_registry.write().await = registry;
         }
 
         let registry = self.table_registry.read().await;

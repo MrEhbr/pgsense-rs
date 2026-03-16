@@ -150,11 +150,7 @@ impl DatabaseUnit {
     async fn scan_loop(mut event_rx: mpsc::Receiver<Vec<ScanEvent>>, scanner: &ArcSwap<Scanner>, dispatcher: &Dispatcher) {
         while let Some(events) = event_rx.recv().await {
             let scanner = scanner.load();
-            let batch_len = events.len();
-            let batch_db = events
-                .first()
-                .map(|e| e.database.clone())
-                .unwrap_or_default();
+            let batch_db = events.first().map(|e| e.database.as_str()).unwrap_or("");
 
             for event in &events {
                 let start = std::time::Instant::now();
@@ -184,8 +180,8 @@ impl DatabaseUnit {
                 }
             }
             metrics::BATCH_SIZE
-                .with_label_values(&[&batch_db])
-                .observe(batch_len as f64);
+                .with_label_values(&[batch_db])
+                .observe(events.len() as f64);
         }
     }
 }

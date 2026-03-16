@@ -1,12 +1,25 @@
+use std::fmt::Write;
+
 pub fn mask(s: &str) -> String {
-    let chars: Vec<char> = s.chars().collect();
-    if chars.len() < 8 {
-        return "*".repeat(chars.len());
+    let char_len = s.chars().count();
+    if char_len < 8 {
+        return "*".repeat(char_len);
     }
-    let first: String = chars[..2].iter().collect();
-    let last: String = chars[chars.len() - 2..].iter().collect();
-    let middle = "*".repeat(chars.len() - 4);
-    format!("{first}{middle}{last}")
+
+    let mut chars = s.chars();
+    let c0 = chars.next().unwrap();
+    let c1 = chars.next().unwrap();
+
+    let last_start = s.char_indices().nth(char_len - 2).unwrap().0;
+
+    let mut result = String::with_capacity(s.len());
+    result.push(c0);
+    result.push(c1);
+    for _ in 0..(char_len - 4) {
+        result.push('*');
+    }
+    let _ = write!(result, "{}", &s[last_start..]);
+    result
 }
 
 #[cfg(test)]

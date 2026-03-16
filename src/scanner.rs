@@ -106,7 +106,7 @@ impl Scanner {
             for finding in &mut findings {
                 finding
                     .primary_keys
-                    .retain(|(col, _)| !matched_columns.contains(col));
+                    .retain(|(col, _)| !matched_columns.contains(col.as_str()));
             }
         }
 

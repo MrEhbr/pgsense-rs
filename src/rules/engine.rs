@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{borrow::Cow, collections::HashSet};
 
 use anyhow::{Context, Result};
 use regex::{Regex, RegexSet};
@@ -54,9 +54,17 @@ pub struct CompiledRule {
     allowlist: Option<CompiledAllowlist>,
 }
 
+impl CompiledRule {
+    fn is_allowed(&self, text: &str) -> bool {
+        self.allowlist
+            .as_ref()
+            .is_some_and(|al| al.is_allowed(&self.meta.id, text))
+    }
+}
+
 pub struct RuleMatch<'a> {
     pub rule: &'a RuleMetadata,
-    pub matched_text: String,
+    pub matched_text: Cow<'a, str>,
 }
 
 /// Multi-type rule engine with three-phase scanning.
@@ -65,6 +73,8 @@ pub struct RuleEngine {
     regex_set: RegexSet,
     /// Maps regex_set match index → rules[] index
     regex_indices: Vec<usize>,
+    builtin_indices: Vec<usize>,
+    script_indices: Vec<usize>,
     script_engine: rhai::Engine,
 }
 
@@ -74,6 +84,8 @@ impl RuleEngine {
         let mut rules = Vec::with_capacity(configs.len());
         let mut regex_patterns: Vec<String> = Vec::new();
         let mut regex_indices: Vec<usize> = Vec::new();
+        let mut builtin_indices: Vec<usize> = Vec::new();
+        let mut script_indices: Vec<usize> = Vec::new();
 
         for (i, c) in configs.iter().enumerate() {
             if let Some(scope) = &c.scope {
@@ -104,6 +116,7 @@ impl RuleEngine {
                     let builtin_kind = c.builtin.unwrap_or_else(|| {
                         panic!("builtin rule '{}' requires a `builtin` field", c.id);
                     });
+                    builtin_indices.push(i);
                     RuleKind::Builtin(Detector::from_kind(builtin_kind))
                 },
                 RuleType::Script => {
@@ -111,6 +124,7 @@ impl RuleEngine {
                         panic!("script rule '{}' requires a `script` field", c.id);
                     });
                     let ast = script::compile_script(&script_engine, path).with_context(|| format!("failed to compile script for rule '{}'", c.id))?;
+                    script_indices.push(i);
                     RuleKind::Script { ast }
                 },
             };
@@ -137,11 +151,13 @@ impl RuleEngine {
             rules,
             regex_set,
             regex_indices,
+            builtin_indices,
+            script_indices,
             script_engine,
         })
     }
 
-    pub fn scan_value<'a>(&'a self, value: &str) -> Vec<RuleMatch<'a>> {
+    pub fn scan_value<'a>(&'a self, value: &'a str) -> Vec<RuleMatch<'a>> {
         let mut results = Vec::new();
 
         // Phase 1: RegexSet fast-path
@@ -151,78 +167,66 @@ impl RuleEngine {
             if let RuleKind::Regex { ref regex, ref validator } = rule.kind
                 && let Some(mat) = regex.find(value)
             {
-                let matched_text = mat.as_str().to_string();
+                let matched_text = mat.as_str();
 
                 if let Some(v) = validator {
                     let valid = match v {
-                        Validator::Luhn => validators::luhn(&matched_text),
-                        Validator::Ssn => validators::ssn(&matched_text),
+                        Validator::Luhn => validators::luhn(matched_text),
+                        Validator::Ssn => validators::ssn(matched_text),
                     };
                     if !valid {
                         continue;
                     }
                 }
 
-                if rule
-                    .allowlist
-                    .as_ref()
-                    .is_some_and(|al| al.is_allowed(&rule.meta.id, &matched_text))
-                {
+                if rule.is_allowed(matched_text) {
                     continue;
                 }
 
                 results.push(RuleMatch {
                     rule: &rule.meta,
-                    matched_text,
+                    matched_text: Cow::Borrowed(matched_text),
                 });
             }
         }
 
         // Phase 2: Builtin detectors
-        for rule in &self.rules {
-            if let RuleKind::Builtin(ref detector) = rule.kind {
-                for matched_text in detector.scan(value) {
-                    if rule
-                        .allowlist
-                        .as_ref()
-                        .is_some_and(|al| al.is_allowed(&rule.meta.id, &matched_text))
-                    {
-                        continue;
-                    }
-                    results.push(RuleMatch {
-                        rule: &rule.meta,
-                        matched_text,
-                    });
+        for &rule_idx in &self.builtin_indices {
+            let rule = &self.rules[rule_idx];
+            let RuleKind::Builtin(ref detector) = rule.kind else { continue };
+            for matched_text in detector.scan(value) {
+                if rule.is_allowed(&matched_text) {
+                    continue;
                 }
+                results.push(RuleMatch {
+                    rule: &rule.meta,
+                    matched_text: Cow::Owned(matched_text),
+                });
             }
         }
 
         // Phase 3: Script rules
-        for rule in &self.rules {
-            if let RuleKind::Script { ref ast } = rule.kind {
-                match script::run_detect(&self.script_engine, ast, value) {
-                    Ok(matches) => {
-                        for matched_text in matches {
-                            if rule
-                                .allowlist
-                                .as_ref()
-                                .is_some_and(|al| al.is_allowed(&rule.meta.id, &matched_text))
-                            {
-                                continue;
-                            }
-                            results.push(RuleMatch {
-                                rule: &rule.meta,
-                                matched_text,
-                            });
+        for &rule_idx in &self.script_indices {
+            let rule = &self.rules[rule_idx];
+            let RuleKind::Script { ref ast } = rule.kind else { continue };
+            match script::run_detect(&self.script_engine, ast, value) {
+                Ok(matches) => {
+                    for matched_text in matches {
+                        if rule.is_allowed(&matched_text) {
+                            continue;
                         }
-                    },
-                    Err(e) => {
-                        metrics::SCRIPT_ERRORS
-                            .with_label_values(&[&rule.meta.id])
-                            .inc();
-                        warn!(rule_id = %rule.meta.id, error = %e, "script rule execution failed");
-                    },
-                }
+                        results.push(RuleMatch {
+                            rule: &rule.meta,
+                            matched_text: Cow::Owned(matched_text),
+                        });
+                    }
+                },
+                Err(e) => {
+                    metrics::SCRIPT_ERRORS
+                        .with_label_values(&[&rule.meta.id])
+                        .inc();
+                    warn!(rule_id = %rule.meta.id, error = %e, "script rule execution failed");
+                },
             }
         }
 

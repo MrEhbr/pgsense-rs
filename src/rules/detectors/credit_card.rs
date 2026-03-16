@@ -1,20 +1,21 @@
 use crate::rules::validators;
 
 /// Walk the string finding 13-19 digit sequences (optionally separated by
-/// spaces/dashes), then validate each with Luhn.
+/// spaces/dashes), then validate each with Luhn. Works on bytes directly
+/// since credit card patterns are ASCII-only.
 pub(super) fn scan(value: &str) -> Vec<String> {
+    let bytes = value.as_bytes();
+    let len = bytes.len();
     let mut results = Vec::new();
-    let chars: Vec<char> = value.chars().collect();
-    let len = chars.len();
     let mut i = 0;
 
     while i < len {
-        if !chars[i].is_ascii_digit() {
+        if !bytes[i].is_ascii_digit() {
             i += 1;
             continue;
         }
 
-        if i > 0 && (chars[i - 1].is_ascii_alphanumeric() || chars[i - 1] == '_') {
+        if i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_') {
             i += 1;
             continue;
         }
@@ -24,22 +25,22 @@ pub(super) fn scan(value: &str) -> Vec<String> {
         let mut j = i;
 
         while j < len && digit_count < 19 {
-            if chars[j].is_ascii_digit() {
+            if bytes[j].is_ascii_digit() {
                 digit_count += 1;
                 j += 1;
-            } else if (chars[j] == ' ' || chars[j] == '-') && digit_count > 0 && j + 1 < len && chars[j + 1].is_ascii_digit() {
+            } else if (bytes[j] == b' ' || bytes[j] == b'-') && digit_count > 0 && j + 1 < len && bytes[j + 1].is_ascii_digit() {
                 j += 1;
             } else {
                 break;
             }
         }
 
-        let at_boundary = j >= len || !(chars[j].is_ascii_alphanumeric() || chars[j] == '_');
+        let at_boundary = j >= len || !(bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_');
 
         if (13..=19).contains(&digit_count) && at_boundary {
-            let candidate: String = chars[start..j].iter().collect();
-            if validators::luhn(&candidate) {
-                results.push(candidate);
+            let candidate = &value[start..j];
+            if validators::luhn(candidate) {
+                results.push(candidate.to_string());
             }
         }
 
@@ -63,6 +64,15 @@ mod tests {
     #[case("abc4111111111111111xyz", &[])]
     #[case("Hello world, this is normal text", &[])]
     #[case("cards: 4111111111111111 and 5500000000000004", &["4111111111111111", "5500000000000004"])]
+    // UTF-8: multi-byte chars around the number
+    #[case("€4111111111111111", &["4111111111111111"])]
+    #[case("カード4111111111111111番号", &["4111111111111111"])]
+    #[case("💳 4111111111111111 ✓", &["4111111111111111"])]
+    // UTF-8: multi-byte chars inside the number must not match
+    #[case("4111€11111111111", &[])]
+    #[case("4111💳1111111111111", &[])]
+    #[case("4111\u{200B}111111111111", &[])]
+    #[case("4111·1111·1111·1111", &[])]
     fn credit_card_scan(#[case] input: &str, #[case] expected: &[&str]) {
         assert_eq!(scan(input), expected);
     }
