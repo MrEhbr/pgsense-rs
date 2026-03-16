@@ -12,7 +12,7 @@ use crate::scanner::Finding;
 #[derive(Debug)]
 pub struct PostgresChannel {
     pool: PgPool,
-    table_fqn: String,
+    insert_query: String,
 }
 
 impl PostgresChannel {
@@ -41,18 +41,20 @@ impl PostgresChannel {
             connect_options = connect_options.password(password.expose_secret());
         }
 
-        let schema_for_hook = schema.clone();
         let pool = PgPoolOptions::new()
             .min_connections(0)
             .max_connections(2)
             .idle_timeout(Some(std::time::Duration::from_secs(30)))
-            .after_connect(move |conn, _meta| {
-                let schema = schema_for_hook.clone();
-                Box::pin(async move {
-                    conn.execute(format!(r#"SET search_path TO "{schema}""#).as_str())
-                        .await?;
-                    Ok(())
-                })
+            .after_connect({
+                let schema = schema.clone();
+                move |conn, _meta| {
+                    let schema = schema.clone();
+                    Box::pin(async move {
+                        conn.execute(format!(r#"SET search_path TO "{schema}""#).as_str())
+                            .await?;
+                        Ok(())
+                    })
+                }
             })
             .connect_with(connect_options)
             .await
@@ -84,10 +86,14 @@ impl PostgresChannel {
             .context("failed to create findings table")?;
 
         let table_fqn = format!(r#""{schema}"."{table}""#);
+        let insert_query = format!(
+            r#"INSERT INTO {table_fqn} (database, rule_id, description, category, severity, schema_name, table_name, column_name, masked_sample, primary_key, lsn)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"#,
+        );
 
         info!(schema, table, "postgres alert channel initialized");
 
-        Ok(Self { pool, table_fqn })
+        Ok(Self { pool, insert_query })
     }
 
     pub async fn send(&self, finding: &Finding) -> Result<()> {
@@ -98,13 +104,7 @@ impl PostgresChannel {
             .collect::<serde_json::Map<String, serde_json::Value>>()
             .into();
 
-        let query = format!(
-            r#"INSERT INTO {} (database, rule_id, description, category, severity, schema_name, table_name, column_name, masked_sample, primary_key, lsn)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"#,
-            self.table_fqn,
-        );
-
-        sqlx::query(&query)
+        sqlx::query(&self.insert_query)
             .bind(&finding.database)
             .bind(&finding.rule_id)
             .bind(&finding.description)

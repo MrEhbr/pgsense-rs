@@ -1,5 +1,6 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, hash_map::Entry},
+    hash::{BuildHasher, BuildHasherDefault, DefaultHasher, Hash, Hasher},
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -8,21 +9,12 @@ use crate::scanner::Finding;
 
 const PRUNE_THRESHOLD: usize = 10_000;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct DedupKey {
-    database: String,
-    schema_name: String,
-    table_name: String,
-    column_name: String,
-    rule_id: String,
-    value_hash: u64,
-}
-
 /// Suppresses duplicate alerts for the same (schema, table, column, rule,
-/// value) within a time window. Uses a hash of the original matched text
-/// so different values always produce distinct keys regardless of masking.
+/// value) within a time window. Uses a compound hash of all key fields to
+/// avoid cloning strings on every lookup.
 pub struct Deduplicator {
-    seen: Mutex<HashMap<DedupKey, Instant>>,
+    seen: Mutex<HashMap<u64, Instant>>,
+    hasher: BuildHasherDefault<DefaultHasher>,
     window: Duration,
 }
 
@@ -30,6 +22,7 @@ impl Deduplicator {
     pub fn new(window: Duration) -> Self {
         Self {
             seen: Mutex::new(HashMap::new()),
+            hasher: BuildHasherDefault::default(),
             window,
         }
     }
@@ -42,23 +35,31 @@ impl Deduplicator {
             seen.retain(|_, last| now.duration_since(*last) < self.window);
         }
 
-        let key = DedupKey {
-            database: finding.database.clone(),
-            schema_name: finding.schema_name.clone(),
-            table_name: finding.table_name.clone(),
-            column_name: finding.column_name.clone(),
-            rule_id: finding.rule_id.clone(),
-            value_hash: finding.value_hash,
-        };
+        let key = self.dedup_key(finding);
         let now = Instant::now();
 
-        match seen.get(&key) {
-            Some(last) if now.duration_since(*last) < self.window => false,
-            _ => {
-                seen.insert(key, now);
+        match seen.entry(key) {
+            Entry::Occupied(e) if now.duration_since(*e.get()) < self.window => false,
+            Entry::Occupied(mut e) => {
+                e.insert(now);
+                true
+            },
+            Entry::Vacant(e) => {
+                e.insert(now);
                 true
             },
         }
+    }
+
+    fn dedup_key(&self, finding: &Finding) -> u64 {
+        let mut hasher = self.hasher.build_hasher();
+        finding.database.hash(&mut hasher);
+        finding.schema_name.hash(&mut hasher);
+        finding.table_name.hash(&mut hasher);
+        finding.column_name.hash(&mut hasher);
+        finding.rule_id.hash(&mut hasher);
+        finding.value_hash.hash(&mut hasher);
+        hasher.finish()
     }
 }
 

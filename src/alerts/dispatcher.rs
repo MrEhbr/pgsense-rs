@@ -36,40 +36,48 @@ impl Dispatcher {
             });
         }
         if config.jsonl.enabled {
-            let name = config.jsonl.name.clone().unwrap_or_else(|| "jsonl".into());
+            let name = config.jsonl.name.as_deref().unwrap_or("jsonl").to_owned();
             channels.push(NamedChannel {
                 name,
                 channel: AlertChannel::Jsonl(JsonlChannel::new(&config.jsonl)?),
             });
         }
         for (i, webhook_config) in config.webhooks.iter().enumerate() {
-            let name = webhook_config.name.clone().unwrap_or_else(|| {
-                if config.webhooks.len() == 1 {
-                    "webhook".into()
-                } else {
-                    format!("webhook-{}", i + 1)
-                }
-            });
+            let name = webhook_config
+                .name
+                .as_deref()
+                .map(str::to_owned)
+                .unwrap_or_else(|| {
+                    if config.webhooks.len() == 1 {
+                        "webhook".into()
+                    } else {
+                        format!("webhook-{}", i + 1)
+                    }
+                });
             channels.push(NamedChannel {
                 name,
                 channel: AlertChannel::Webhook(WebhookChannel::new(webhook_config)?),
             });
         }
         for (i, slack_config) in config.slack.iter().enumerate() {
-            let name = slack_config.name.clone().unwrap_or_else(|| {
-                if config.slack.len() == 1 {
-                    "slack".into()
-                } else {
-                    format!("slack-{}", i + 1)
-                }
-            });
+            let name = slack_config
+                .name
+                .as_deref()
+                .map(str::to_owned)
+                .unwrap_or_else(|| {
+                    if config.slack.len() == 1 {
+                        "slack".into()
+                    } else {
+                        format!("slack-{}", i + 1)
+                    }
+                });
             channels.push(NamedChannel {
                 name,
                 channel: AlertChannel::Slack(SlackChannel::new(slack_config)?),
             });
         }
         if let Some(pg_config) = &config.postgres {
-            let name = pg_config.name.clone().unwrap_or_else(|| "postgres".into());
+            let name = pg_config.name.as_deref().unwrap_or("postgres").to_owned();
             channels.push(NamedChannel {
                 name,
                 channel: AlertChannel::Postgres(PostgresChannel::new(pg_config).await?),
@@ -155,7 +163,7 @@ impl Dispatcher {
     }
 
     pub fn validate_channel_routing(&self, rules: &[crate::rules::config::RuleConfig]) {
-        let known: std::collections::HashSet<&str> = self.channel_names().into_iter().collect();
+        let known: std::collections::HashSet<&str> = self.channels.iter().map(|nc| nc.name.as_str()).collect();
         for rule in rules {
             if let Some(channels) = &rule.channels {
                 for ch in channels {

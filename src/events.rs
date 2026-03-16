@@ -100,6 +100,7 @@ pub fn cell_to_string(cell: &Cell) -> Option<String> {
     }
 }
 
+#[allow(non_snake_case)] // rust-analyzer false positive: `None` in macro is a pattern, not a variable
 fn array_cell_to_string(arr: &ArrayCell) -> String {
     macro_rules! format_array {
         ($values:expr) => {
@@ -205,25 +206,18 @@ pub fn from_update(event: &UpdateEvent, meta: &TableMeta, database: &str) -> Sca
 }
 
 pub fn extract_scan_events(events: &[Event], table_registry: &std::collections::HashMap<TableId, TableMeta>, database: &str) -> Vec<ScanEvent> {
-    let mut scan_events = Vec::new();
-
-    for event in events {
-        match event {
-            Event::Insert(e) => {
-                if let Some(meta) = table_registry.get(&e.table_id) {
-                    scan_events.push(from_insert(e, meta, database));
-                }
-            },
-            Event::Update(e) => {
-                if let Some(meta) = table_registry.get(&e.table_id) {
-                    scan_events.push(from_update(e, meta, database));
-                }
-            },
-            _ => {},
-        }
-    }
-
-    scan_events
+    events
+        .iter()
+        .filter_map(|event| match event {
+            Event::Insert(e) => table_registry
+                .get(&e.table_id)
+                .map(|meta| from_insert(e, meta, database)),
+            Event::Update(e) => table_registry
+                .get(&e.table_id)
+                .map(|meta| from_update(e, meta, database)),
+            _ => None,
+        })
+        .collect()
 }
 
 #[cfg(test)]

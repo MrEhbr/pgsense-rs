@@ -5,10 +5,15 @@ use crate::{rules::config::Severity, scanner::Finding};
 pub struct LogChannel;
 
 fn format_primary_keys(pks: &[(String, String)]) -> String {
-    pks.iter()
-        .map(|(k, v)| format!("{k}={v}"))
-        .collect::<Vec<_>>()
-        .join(",")
+    use std::fmt::Write;
+    let mut buf = String::new();
+    for (i, (k, v)) in pks.iter().enumerate() {
+        if i > 0 {
+            buf.push(',');
+        }
+        let _ = write!(buf, "{k}={v}");
+    }
+    buf
 }
 
 macro_rules! emit_finding {
