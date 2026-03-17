@@ -1,0 +1,6 @@
+apiVersion: v2
+name: pgsense
+description: Rule-based PostgreSQL replication stream scanner for real-time sensitive data detection
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

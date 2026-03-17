@@ -1,0 +1,139 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "pgsense.fullname" . }}
+  labels:
+    {{- include "pgsense.labels" . | nindent 4 }}
+data:
+  config.toml: |
+    [log]
+    level = {{ .Values.log.level | quote }}
+    format = {{ .Values.log.format | quote }}
+    output = {{ .Values.log.output | quote }}
+
+    {{- if .Values.rulesFile }}
+    rules_file = "/config/rules.toml"
+    {{- else }}
+    rules_file = "/etc/pgsense/rules.toml"
+    {{- end }}
+
+    {{- range $i, $db := .Values.databases }}
+
+    [[databases]]
+    host = {{ $db.host | quote }}
+    port = {{ $db.port }}
+    dbname = {{ $db.dbname | quote }}
+    username = {{ $db.username | quote }}
+    {{- if and $db.passwordSecret $db.passwordSecret.name }}
+    password_file = "/secrets/databases/{{ $db.name }}/{{ $db.passwordSecret.key }}"
+    {{- end }}
+    publication = {{ default "pgsense_pub" $db.publication | quote }}
+    {{- if $db.tls }}
+    tls.enabled = {{ default false $db.tls.enabled }}
+    {{- if $db.tls.trustedRootCerts }}
+    tls.trusted_root_certs = {{ $db.tls.trustedRootCerts | quote }}
+    {{- end }}
+    {{- end }}
+    {{- if $db.scan }}
+    {{- if $db.scan.includeSchemas }}
+    scan.include_schemas = {{ $db.scan.includeSchemas | toJson }}
+    {{- end }}
+    {{- if $db.scan.excludeTables }}
+    scan.exclude_tables = {{ $db.scan.excludeTables | toJson }}
+    {{- end }}
+    {{- if $db.scan.excludeColumns }}
+    scan.exclude_columns = {{ $db.scan.excludeColumns | toJson }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+
+    [pipeline]
+    batch_max_size = {{ .Values.pipeline.batchMaxSize }}
+    batch_max_fill_ms = {{ .Values.pipeline.batchMaxFillMs }}
+    table_error_retry_delay_ms = {{ .Values.pipeline.tableErrorRetryDelayMs }}
+    table_error_retry_max_attempts = {{ .Values.pipeline.tableErrorRetryMaxAttempts }}
+    max_table_sync_workers = {{ .Values.pipeline.maxTableSyncWorkers }}
+
+    {{- if and (ne (kindOf .Values.pipeline.store) "string") .Values.pipeline.store }}
+    {{- if .Values.pipeline.store.postgres }}
+    [pipeline.store.postgres]
+    host = {{ .Values.pipeline.store.postgres.host | quote }}
+    port = {{ default 5432 .Values.pipeline.store.postgres.port }}
+    dbname = {{ default "postgres" .Values.pipeline.store.postgres.dbname | quote }}
+    username = {{ default "postgres" .Values.pipeline.store.postgres.username | quote }}
+    {{- if .Values.pipeline.store.postgres.passwordFile }}
+    password_file = {{ .Values.pipeline.store.postgres.passwordFile | quote }}
+    {{- end }}
+    schema = {{ default "pgsense" .Values.pipeline.store.postgres.schema | quote }}
+    {{- end }}
+    {{- if .Values.pipeline.store.sqlite }}
+    [pipeline.store.sqlite]
+    path = {{ .Values.pipeline.store.sqlite.path | quote }}
+    {{- end }}
+    {{- end }}
+
+    [scan]
+    {{- if .Values.scan.includeSchemas }}
+    include_schemas = {{ .Values.scan.includeSchemas | toJson }}
+    {{- end }}
+    {{- if .Values.scan.excludeTables }}
+    exclude_tables = {{ .Values.scan.excludeTables | toJson }}
+    {{- end }}
+    {{- if .Values.scan.excludeColumns }}
+    exclude_columns = {{ .Values.scan.excludeColumns | toJson }}
+    {{- end }}
+
+    [alerts]
+    dedup_window_seconds = {{ .Values.alerts.dedupWindowSeconds }}
+
+    [alerts.log]
+    enabled = {{ .Values.alerts.log.enabled }}
+
+    [alerts.stdout]
+    enabled = {{ .Values.alerts.stdout.enabled }}
+
+    [alerts.jsonl]
+    enabled = {{ .Values.alerts.jsonl.enabled }}
+    path = {{ .Values.alerts.jsonl.path | quote }}
+
+    {{- range .Values.alerts.webhooks }}
+    [[alerts.webhooks]]
+    {{- if .name }}
+    name = {{ .name | quote }}
+    {{- end }}
+    url = {{ .url | quote }}
+    timeout_ms = {{ default 5000 .timeout_ms }}
+    {{- end }}
+
+    {{- range .Values.alerts.slack }}
+    [[alerts.slack]]
+    {{- if .name }}
+    name = {{ .name | quote }}
+    {{- end }}
+    token = {{ .token | quote }}
+    channel = {{ .channel | quote }}
+    {{- end }}
+
+    {{- if .Values.alerts.postgres }}
+    {{- with .Values.alerts.postgres }}
+    [alerts.postgres]
+    host = {{ .host | quote }}
+    port = {{ default 5432 .port }}
+    dbname = {{ default "postgres" .dbname | quote }}
+    username = {{ default "postgres" .username | quote }}
+    {{- if .passwordFile }}
+    password_file = {{ .passwordFile | quote }}
+    {{- end }}
+    schema = {{ default "pgsense" .schema | quote }}
+    table = {{ default "findings" .table | quote }}
+    {{- end }}
+    {{- end }}
+
+    [server]
+    enabled = {{ .Values.server.enabled }}
+    port = {{ .Values.server.port }}
+
+  {{- if .Values.rulesFile }}
+  rules.toml: |
+{{ .Values.rulesFile | indent 4 }}
+  {{- end }}

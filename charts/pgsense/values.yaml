@@ -1,0 +1,111 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/ehbr/pgsense-rs
+  pullPolicy: IfNotPresent
+  # Overrides the image tag (default is chart appVersion)
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65534
+  capabilities:
+    drop:
+      - ALL
+
+# -- Detection rules file content (rendered as ConfigMap).
+# If empty, you must mount your own rules file.
+rulesFile: ""
+
+# -- Source databases to monitor.
+# Each entry maps to a [[databases]] block in config.toml.
+# Passwords are read from files mounted from Kubernetes Secrets.
+databases:
+  - name: mydb
+    host: localhost
+    port: 5432
+    dbname: mydb
+    username: postgres
+    publication: pgsense_pub
+    # -- Existing Secret containing the database password.
+    # The password is mounted as a file and referenced via password_file.
+    passwordSecret:
+      name: ""
+      key: password
+    tls:
+      enabled: false
+      trustedRootCerts: ""
+    # -- Per-database scan filter (overrides global scan)
+    scan: {}
+
+# -- Global scan filter defaults (overridden per-database if set)
+scan:
+  includeSchemas: []
+  excludeTables: []
+  excludeColumns: []
+
+pipeline:
+  batchMaxSize: 1000
+  batchMaxFillMs: 5000
+  tableErrorRetryDelayMs: 10000
+  tableErrorRetryMaxAttempts: 5
+  maxTableSyncWorkers: 4
+  # -- Pipeline store backend: "memory", or an object with postgres/sqlite key
+  store: memory
+
+log:
+  level: info
+  format: console
+  output: stderr
+
+alerts:
+  dedupWindowSeconds: 300
+  log:
+    enabled: true
+  stdout:
+    enabled: false
+  jsonl:
+    enabled: false
+    path: /tmp/alerts.jsonl
+  webhooks: []
+  slack: []
+  # -- PostgreSQL alert channel config
+  postgres: {}
+
+server:
+  enabled: true
+  port: 9090
+
+service:
+  type: ClusterIP
+  port: 9090
+
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  labels: {}
+
+resources: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
