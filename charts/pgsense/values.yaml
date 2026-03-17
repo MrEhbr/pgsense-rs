@@ -30,8 +30,8 @@ securityContext:
     drop:
       - ALL
 
-# -- Detection rules file content (rendered as ConfigMap).
-# If empty, you must mount your own rules file.
+# -- Path to rules file inside the container.
+# Defaults to /etc/pgsense/rules.toml (bundled in image).
 rulesFile: ""
 
 # -- Source databases to monitor.
@@ -101,6 +101,11 @@ serviceMonitor:
   enabled: false
   interval: 30s
   labels: {}
+
+grafanaDashboard:
+  enabled: false
+  labels: {}
+  annotations: {}
 
 resources: {}
 

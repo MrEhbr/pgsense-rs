@@ -6,16 +6,12 @@ metadata:
     {{- include "pgsense.labels" . | nindent 4 }}
 data:
   config.toml: |
+    rules_file = {{ .Values.rulesFile | default "/etc/pgsense/rules.toml" | quote }}
+
     [log]
     level = {{ .Values.log.level | quote }}
     format = {{ .Values.log.format | quote }}
     output = {{ .Values.log.output | quote }}
-
-    {{- if .Values.rulesFile }}
-    rules_file = "/config/rules.toml"
-    {{- else }}
-    rules_file = "/etc/pgsense/rules.toml"
-    {{- end }}
 
     {{- range $i, $db := .Values.databases }}
 
@@ -24,7 +20,9 @@ data:
     port = {{ $db.port }}
     dbname = {{ $db.dbname | quote }}
     username = {{ $db.username | quote }}
-    {{- if and $db.passwordSecret $db.passwordSecret.name }}
+    {{- if $db.password }}
+    password = {{ $db.password | quote }}
+    {{- else if and $db.passwordSecret $db.passwordSecret.name }}
     password_file = "/secrets/databases/{{ $db.name }}/{{ $db.passwordSecret.key }}"
     {{- end }}
     publication = {{ default "pgsense_pub" $db.publication | quote }}
@@ -61,7 +59,9 @@ data:
     port = {{ default 5432 .Values.pipeline.store.postgres.port }}
     dbname = {{ default "postgres" .Values.pipeline.store.postgres.dbname | quote }}
     username = {{ default "postgres" .Values.pipeline.store.postgres.username | quote }}
-    {{- if .Values.pipeline.store.postgres.passwordFile }}
+    {{- if .Values.pipeline.store.postgres.password }}
+    password = {{ .Values.pipeline.store.postgres.password | quote }}
+    {{- else if .Values.pipeline.store.postgres.passwordFile }}
     password_file = {{ .Values.pipeline.store.postgres.passwordFile | quote }}
     {{- end }}
     schema = {{ default "pgsense" .Values.pipeline.store.postgres.schema | quote }}
@@ -121,7 +121,9 @@ data:
     port = {{ default 5432 .port }}
     dbname = {{ default "postgres" .dbname | quote }}
     username = {{ default "postgres" .username | quote }}
-    {{- if .passwordFile }}
+    {{- if .password }}
+    password = {{ .password | quote }}
+    {{- else if .passwordFile }}
     password_file = {{ .passwordFile | quote }}
     {{- end }}
     schema = {{ default "pgsense" .schema | quote }}
@@ -132,8 +134,3 @@ data:
     [server]
     enabled = {{ .Values.server.enabled }}
     port = {{ .Values.server.port }}
-
-  {{- if .Values.rulesFile }}
-  rules.toml: |
-{{ .Values.rulesFile | indent 4 }}
-  {{- end }}
