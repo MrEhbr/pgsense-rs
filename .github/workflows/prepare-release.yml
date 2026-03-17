@@ -100,7 +100,8 @@ jobs:
 
       - name: Commit version and changelog changes
         run: |
-          git add Cargo.toml Cargo.lock crates/*/Cargo.toml CHANGELOG.md crates/*/CHANGELOG.md
+          shopt -s nullglob
+          git add Cargo.toml Cargo.lock CHANGELOG.md crates/*/Cargo.toml crates/*/CHANGELOG.md
           git commit -m "chore(release): bump version to ${{ steps.version.outputs.version }}"
           echo "Committed version and changelog changes"
 

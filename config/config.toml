@@ -1,0 +1,129 @@
+# pgsense-rs example configuration
+#
+# All settings support environment variable overrides with the APP__ prefix.
+# Nesting uses double underscores: APP__DATABASES__0__HOST=myhost
+#
+# Settings shown commented out are optional and display their default values.
+# Uncomment and change only what you need.
+
+# --- Logging ---
+
+# [log]
+# level = "info"           # tracing level
+# format = "console"       # "console" | "json"
+# output = "stderr"        # "stderr" | "stdout" | file path
+
+# Detection rules file. Also settable via CLI: --rules <FILE>
+rules_file = "config/rules.toml"
+
+# --- Source databases to monitor ---
+#
+# Add one [[databases]] entry per PostgreSQL database.
+# Identity key is "host/dbname" — must be unique across entries.
+
+[[databases]]
+host = "localhost"
+# port = 5432
+dbname = "mydb"
+username = "postgres"
+password = "postgres"
+# publication = "pgsense_pub"    # must exist: CREATE PUBLICATION pgsense_pub FOR ALL TABLES;
+# tls.enabled = false
+# tls.trusted_root_certs = "/path/to/ca.pem"
+
+# Per-database scan filter (optional — overrides top-level [scan] for this database):
+# scan.include_schemas = ["public"]
+# scan.exclude_tables = ["audit_log"]
+# scan.exclude_columns = ["id"]
+
+# Additional database example:
+# [[databases]]
+# host = "db2.example.com"
+# dbname = "orders"
+# username = "postgres"
+# password = "postgres"
+
+# --- Pipeline (replication stream processing) ---
+
+# [pipeline]
+# batch_max_size = 1000
+# batch_max_fill_ms = 5000
+# table_error_retry_delay_ms = 10000
+# table_error_retry_max_attempts = 5
+# max_table_sync_workers = 4
+
+# Store backend for LSN checkpointing — shared across all databases.
+# Default: memory (state lost on restart). Pick ONE alternative:
+#
+# store = "memory"
+#
+# [pipeline.store.postgres]
+# host = "localhost"
+# port = 5432
+# dbname = "postgres"
+# username = "postgres"
+# password = "postgres"
+# schema = "pgsense"
+#
+# [pipeline.store.sqlite]
+# path = "pgsense-state.db"
+
+# --- Scan filters (top-level defaults, can be overridden per database) ---
+
+# [scan]
+# include_schemas = []           # only scan these schemas (empty = all)
+# exclude_tables = []            # skip these tables
+# exclude_columns = []           # skip these columns globally
+
+# --- Alert channels ---
+
+# [alerts]
+# dedup_window_seconds = 300     # suppress duplicate findings within this window (0 = disabled)
+
+# [alerts.log]
+# enabled = true                 # structured log output (tracing) — enabled by default
+
+# [alerts.stdout]
+# enabled = false                # plain-text stdout
+
+# [alerts.jsonl]
+# enabled = false
+# path = "alerts.jsonl"          # append-only JSONL file
+
+# Webhook (repeatable — add multiple [[alerts.webhooks]] blocks):
+# [[alerts.webhooks]]
+# name = "security-webhook"      # optional display name (default: "webhook" or "webhook-N")
+# url = "https://hooks.example.com/alert"           # required
+# timeout_ms = 5000
+# [alerts.webhooks.headers]
+# Authorization = "Bearer token123"
+
+# Slack (repeatable — add multiple [[alerts.slack]] blocks):
+# [[alerts.slack]]
+# name = "security-slack"        # optional display name (default: "slack" or "slack-N")
+# token = "xoxb-your-bot-token"  # required — Bot User OAuth Token
+# channel = "#pgsense-alerts"    # required — channel name or ID
+# username = "pgsense-bot"       # optional display name
+# icon_emoji = ":shield:"        # optional emoji icon
+# timeout_ms = 5000
+# batch_size = 8                 # findings per message (max 8 for Slack block limits)
+# batch_window_ms = 2000         # max wait before flushing a partial batch
+# max_retries = 3                # retry attempts on 429 rate-limit responses
+
+# PostgreSQL alert channel — writes findings to a queryable table:
+# [alerts.postgres]
+# name = "postgres"              # optional display name
+# host = "localhost"
+# port = 5432
+# dbname = "postgres"
+# username = "postgres"
+# password = "postgres"
+# schema = "pgsense"
+# table = "findings"
+# tls.enabled = false
+
+# --- HTTP server (health checks + Prometheus metrics) ---
+
+# [server]
+# enabled = false                # set true to expose /health, /ready, /metrics
+# port = 9090

@@ -35,6 +35,7 @@ PostgreSQL WAL → etl Pipeline → Scanner → Rule Engine → Alert Dispatcher
 - **Multiple alert channels** — Structured logging, stdout, JSONL file, webhooks, Slack (with batching), PostgreSQL table — with optional per-rule routing
 - **Prometheus metrics** — Events processed, findings by category/severity, alert delivery status, scan latency
 - **Health endpoints** — `/health`, `/ready`, `/metrics` via configurable HTTP server
+- **Multi-database** — Monitor multiple PostgreSQL databases concurrently from a single instance, each with independent pipeline, scan filters, and metrics labels
 - **Column-type filtering** — Automatically skips non-text column types
 - **Persistent checkpointing** — Memory (default), SQLite, or PostgreSQL-backed LSN store for crash recovery
 - **Per-rule scope** — Restrict rules to specific schemas, tables, or columns via include/exclude lists
@@ -66,11 +67,11 @@ CREATE PUBLICATION pgsense_pub FOR ALL TABLES;
 ### 2. Configure
 
 ```bash
-cp config/app.toml my-config.toml
+cp config/config.toml my-config.toml
 # edit my-config.toml — set postgres connection, choose alert channels
 ```
 
-See [`config/app.toml`](config/app.toml) for all options with inline documentation.
+See [`config/config.toml`](config/config.toml) for all options with inline documentation.
 
 ### 3. Add detection rules
 
@@ -117,8 +118,8 @@ Rules support `validate` (Luhn/SSN checksum), `allowlist` (exact values + patter
 ## CLI
 
 ```bash
-pgsense-rs scan -c config/app.toml -r config/rules.toml               # start scanning
-pgsense-rs scan -c config/app.toml -r config/rules.toml -vvv          # verbose
+pgsense-rs scan -c config/config.toml -r config/rules.toml               # start scanning
+pgsense-rs scan -c config/config.toml -r config/rules.toml -vvv          # verbose
 pgsense-rs rules list -r config/rules.toml                            # list loaded rules
 pgsense-rs rules test -r config/rules.toml --input "4111111111111111" # test a value
 ```
@@ -133,7 +134,25 @@ When `server.enabled = true`, an HTTP server exposes:
 | `/ready`   | Returns 200 once the pipeline is up  |
 | `/metrics` | Prometheus-format metrics            |
 
-**Exported metrics**: `pgsense_events_total`, `pgsense_findings_total` (category, severity), `pgsense_alerts_total` (channel, status), `pgsense_scan_duration_seconds`, `pgsense_batch_size`, `pgsense_queue_depth`, `pgsense_dispatch_duration_seconds`.
+**Exported metrics:**
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `pgsense_events_total` | counter | database | Replication events processed |
+| `pgsense_findings_total` | counter | database, category, severity | Sensitive data findings |
+| `pgsense_alerts_total` | counter | channel, status | Alerts dispatched |
+| `pgsense_scan_duration_seconds` | histogram | database | Time scanning a single event |
+| `pgsense_batch_size` | histogram | database | Events per pipeline batch |
+| `pgsense_dispatch_duration_seconds` | histogram | database | Time dispatching alerts |
+| `pgsense_queue_depth` | gauge | database | Pending batches in event channel |
+| `pgsense_pipeline_connected` | gauge | database | Pipeline connection state (1/0) |
+| `pgsense_rules_loaded` | gauge | — | Detection rules currently loaded |
+| `pgsense_pipeline_reconnects_total` | counter | database | Pipeline reconnection attempts |
+| `pgsense_events_skipped_total` | counter | database, reason | Events skipped by scan filters |
+| `pgsense_dedup_total` | counter | database, outcome | Deduplication decisions |
+| `pgsense_config_reloads_total` | counter | status | Configuration reload attempts |
+| `pgsense_script_errors_total` | counter | rule_id | Rhai script execution errors |
+| `process_*` | mixed | — | CPU, memory, open FDs, start time (Linux only) |
 
 ## Development
 
@@ -157,43 +176,7 @@ just test  # Run all tests (nextest)
 just lint  # Clippy + rustfmt check
 just fmt   # Format code
 just bench # Criterion benchmarks
-just run scan -c config/app.toml -r config/rules.toml
-```
-
-### Project Structure
-
-```
-src/
-├── main.rs              # Async entry point
-├── lib.rs               # Module re-exports
-├── args.rs              # CLI argument parsing (clap)
-├── config.rs            # TOML config loading + env overrides
-├── logging.rs           # Tracing setup
-├── pipeline/            # etl integration, PipelineRunner
-├── scanner.rs           # Event scanning, column-type filtering
-├── rules/
-│   ├── engine.rs        # RuleEngine (RegexSet fast-path)
-│   ├── config.rs        # Rule/severity/validator types
-│   ├── validators.rs    # Luhn, SSN validators
-│   ├── detectors/       # Algorithmic CC/SSN/phone detection
-│   ├── masking.rs       # Value masking for output
-│   └── script.rs        # Rhai script execution
-├── alerts/
-│   ├── dispatcher.rs    # Dedup + fan-out to channels
-│   ├── dedup.rs         # Deduplication logic
-│   ├── log.rs           # Structured log channel
-│   ├── stdout.rs        # Stdout channel
-│   ├── jsonl.rs         # JSONL file channel
-│   ├── webhook.rs       # HTTP webhook channel
-│   ├── slack.rs         # Slack channel (batched, with background flush)
-│   └── postgres.rs      # PostgreSQL table channel
-├── commands/
-│   ├── scan.rs          # `scan` subcommand
-│   └── rules.rs         # `rules list` / `rules test`
-├── events.rs            # Event types from pipeline
-├── watcher.rs           # File watcher for rules hot-reload
-├── metrics.rs           # Prometheus metrics
-└── server.rs            # Axum HTTP server (/health, /ready, /metrics)
+just run scan -c config/config.toml -r config/rules.toml
 ```
 
 ### Docker

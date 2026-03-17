@@ -29,7 +29,7 @@ services:
     profiles: [pgsense]
     command: ["scan", "-c", "/opt/pgsense/config.toml", "-r", "/opt/pgsense/rules.toml"]
     volumes:
-      - ../config/bench.toml:/opt/pgsense/config.toml:ro
+      - ./bench.toml:/opt/pgsense/config.toml:ro
       - ../config/rules.toml:/opt/pgsense/rules.toml:ro
     depends_on:
       postgres:

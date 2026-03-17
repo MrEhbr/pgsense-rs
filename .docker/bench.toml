@@ -1,0 +1,18 @@
+# pgsense config for loadtest stand
+# Runs inside Docker — connects to postgres via Docker network hostname
+
+[[databases]]
+host = "127.0.0.1"
+dbname = "postgres"
+username = "postgres"
+password = "postgres"
+tls.enabled = false
+
+[alerts]
+dedup_window_seconds = 0  # disabled for load testing — every finding triggers an alert
+
+[alerts.log]
+enabled = true
+
+[server]
+enabled = true
