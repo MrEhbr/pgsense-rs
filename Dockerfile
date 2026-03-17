@@ -9,5 +9,8 @@ ARG TARGETPLATFORM
 ARG BINARY_NAME
 COPY ${TARGETPLATFORM}/${BINARY_NAME} /usr/local/bin/app
 
-# Set the entrypoint
+# Default detection rules
+COPY config/rules.toml /etc/pgsense/rules.toml
+ENV PGSENSE__RULES_FILE=/etc/pgsense/rules.toml
+
 ENTRYPOINT ["/usr/local/bin/app"]

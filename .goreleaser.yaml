@@ -48,6 +48,8 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    files:
+      - config/rules.toml
 
 checksum:
   split: true
@@ -79,4 +81,5 @@ dockers_v2:
       org.opencontainers.image.revision: "{{.FullCommit}}"
       org.opencontainers.image.version: "{{.Version}}"
       org.opencontainers.image.source: "{{.GitURL}}"
-    extra_files: []
+    extra_files:
+      - config/rules.toml
