@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 ---
+## [0.1.1](https://github.com/MrEhbr/pgsense-rs/compare/v0.1.0..v0.1.1) - 2026-03-17
+
+### Bug Fixes
+
+- **(ci)** disable macOS aarch64-apple-darwin cross-compilation build - ([150be2f](https://github.com/MrEhbr/pgsense-rs/commit/150be2f186c79994af9d0d350918223ba00b79b6)) - Aleksei Burmistrov
 ## [0.1.0] - 2026-03-17
 
 ### Bug Fixes
