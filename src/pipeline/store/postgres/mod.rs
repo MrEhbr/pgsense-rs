@@ -314,11 +314,9 @@ mod tests {
         let config = PostgresStoreConfig {
             host: host.clone(),
             port,
-            dbname: "postgres".to_string(),
-            username: "postgres".to_string(),
             password: Some(SecretString::from("postgres")),
             schema: "pgsense_test".to_string(),
-            tls: Default::default(),
+            ..Default::default()
         };
 
         let mut last_err = None;

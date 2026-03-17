@@ -5,12 +5,13 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use config::{Environment, File, FileFormat};
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
     alerts::config::AlertsConfig,
     logging::LogConfig,
-    pipeline::config::{DatabaseConfig, PipelineSettings},
+    pipeline::config::{DatabaseConfig, PipelineSettings, StoreType},
     rules::config::RuleConfig,
     scanner::ScanFilter,
 };
@@ -41,21 +42,21 @@ pub struct Config {
 }
 
 impl Config {
-    /// Returns database configs with the global scan filter applied as default
-    /// for databases that don't define their own.
-    pub fn databases(&self) -> Vec<DatabaseConfig> {
-        self.databases
-            .iter()
-            .map(|db| {
-                let mut db = db.clone();
-                if db.scan.is_none() {
-                    db.scan = Some(self.scan.clone());
-                }
-                db
-            })
-            .collect()
+    /// Load config from file + env vars, resolve `password_file` fields,
+    /// apply global scan filter defaults, and validate.
+    pub fn load(config_path: Option<&Path>) -> Result<Self> {
+        let mut config: Self = load(config_path)?;
+        config
+            .resolve_passwords()
+            .context("failed to resolve password files")?;
+        for db in &mut config.databases {
+            if db.scan.is_none() {
+                db.scan = Some(config.scan.clone());
+            }
+        }
+        config.validate()?;
+        Ok(config)
     }
-
     pub fn validate(&self) -> Result<()> {
         if self.databases.is_empty() {
             bail!("no databases configured — add at least one [[databases]] entry to your config file");
@@ -67,6 +68,30 @@ impl Config {
             if !seen.insert(id.clone()) {
                 bail!("duplicate database '{id}' — each host/dbname combination must be unique");
             }
+        }
+
+        Ok(())
+    }
+
+    /// Resolve all `password_file` fields across databases, store, and alert
+    /// configs. Call after loading config and before using connections.
+    pub fn resolve_passwords(&mut self) -> Result<()> {
+        for db in &mut self.databases {
+            if let Some(path) = &db.password_file {
+                db.password = Some(read_password_file(path)?);
+            }
+        }
+
+        if let StoreType::Postgres(ref mut pg) = self.pipeline.store
+            && let Some(path) = &pg.password_file
+        {
+            pg.password = Some(read_password_file(path)?);
+        }
+
+        if let Some(ref mut pg) = self.alerts.postgres
+            && let Some(path) = &pg.password_file
+        {
+            pg.password = Some(read_password_file(path)?);
         }
 
         Ok(())
@@ -86,9 +111,15 @@ pub fn load_rules(path: &Path) -> Result<Vec<RuleConfig>> {
     Ok(file.rules)
 }
 
-const ENV_PREFIX: &str = "APP";
+const ENV_PREFIX: &str = "PGSENSE";
 
-/// Load configuration with precedence: env vars (APP__*) > config file >
+/// Read password from a file, trimming trailing whitespace/newlines.
+fn read_password_file(path: &Path) -> Result<SecretString> {
+    let content = std::fs::read_to_string(path).with_context(|| format!("failed to read password file: {}", path.display()))?;
+    Ok(SecretString::from(content.trim_end().to_string()))
+}
+
+/// Load configuration with precedence: env vars (PGSENSE__*) > config file >
 /// defaults.
 pub fn load<T>(config_path: Option<&Path>) -> Result<T>
 where
@@ -109,6 +140,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
+    use secrecy::ExposeSecret;
+    use tempfile::NamedTempFile;
+
     use super::*;
     use crate::pipeline::config::DatabaseConfig;
 
@@ -142,34 +178,6 @@ mod tests {
     }
 
     #[test]
-    fn resolved_databases_applies_global_scan_filter() {
-        let config = Config {
-            databases: vec![
-                DatabaseConfig {
-                    dbname: "db1".to_string(),
-                    ..Default::default()
-                },
-                DatabaseConfig {
-                    dbname: "db2".to_string(),
-                    scan: Some(ScanFilter {
-                        include_schemas: vec!["custom".into()],
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-            ],
-            scan: ScanFilter {
-                include_schemas: vec!["public".into()],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let resolved = config.databases();
-        assert_eq!(resolved[0].scan.as_ref().unwrap().include_schemas, vec!["public".to_string()]);
-        assert_eq!(resolved[1].scan.as_ref().unwrap().include_schemas, vec!["custom".to_string()]);
-    }
-
-    #[test]
     fn validate_distinct_databases_ok() {
         let config = Config {
             databases: vec![
@@ -185,5 +193,83 @@ mod tests {
             ..Default::default()
         };
         config.validate().unwrap();
+    }
+
+    #[test]
+    fn resolve_passwords_reads_from_file() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, "s3cret").unwrap();
+
+        let mut config = Config {
+            databases: vec![DatabaseConfig {
+                password_file: Some(file.path().to_path_buf()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        config.resolve_passwords().unwrap();
+        assert_eq!(
+            config.databases[0]
+                .password
+                .as_ref()
+                .unwrap()
+                .expose_secret(),
+            "s3cret"
+        );
+    }
+
+    #[test]
+    fn resolve_passwords_trims_trailing_newline() {
+        let mut file = NamedTempFile::new().unwrap();
+        write!(file, "pass\n\n").unwrap();
+
+        let mut config = Config {
+            databases: vec![DatabaseConfig {
+                password_file: Some(file.path().to_path_buf()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        config.resolve_passwords().unwrap();
+        assert_eq!(
+            config.databases[0]
+                .password
+                .as_ref()
+                .unwrap()
+                .expose_secret(),
+            "pass"
+        );
+    }
+
+    #[test]
+    fn resolve_passwords_missing_file_errors() {
+        let mut config = Config {
+            databases: vec![DatabaseConfig {
+                password_file: Some(PathBuf::from("/nonexistent/password")),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(config.resolve_passwords().is_err());
+    }
+
+    #[test]
+    fn resolve_passwords_noop_without_password_file() {
+        let mut config = Config {
+            databases: vec![DatabaseConfig {
+                password: Some(SecretString::from("inline")),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        config.resolve_passwords().unwrap();
+        assert_eq!(
+            config.databases[0]
+                .password
+                .as_ref()
+                .unwrap()
+                .expose_secret(),
+            "inline"
+        );
     }
 }

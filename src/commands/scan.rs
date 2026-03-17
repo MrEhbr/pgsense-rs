@@ -37,9 +37,8 @@ pub struct Args {
 }
 
 pub async fn run(args: Args) -> Result<()> {
-    let config: Config = crate::config::load(args.config.as_deref()).context("failed to load configuration")?;
+    let config = Config::load(args.config.as_deref()).context("failed to load configuration")?;
     let config = apply_overrides(&args, config);
-    config.validate().context("invalid configuration")?;
     let _guard = crate::logging::setup(&config.log).context("failed to initialize logging")?;
 
     metrics::init();
@@ -71,8 +70,12 @@ pub async fn run(args: Args) -> Result<()> {
     info!(channels = dispatcher.channel_count(), "alert dispatcher ready");
     let dispatcher = Arc::new(dispatcher);
 
-    let databases = config.databases();
-    let (mut supervisor, mut exit_rx) = Supervisor::new(databases, config.pipeline.clone(), scanner.clone(), dispatcher.clone());
+    let (mut supervisor, mut exit_rx) = Supervisor::new(
+        config.databases.clone(),
+        config.pipeline.clone(),
+        scanner.clone(),
+        dispatcher.clone(),
+    );
     supervisor.start().await?;
 
     // Watch rules file for hot reload — _watcher must stay alive for scan duration

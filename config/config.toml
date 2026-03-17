@@ -1,7 +1,7 @@
 # pgsense-rs example configuration
 #
-# All settings support environment variable overrides with the APP__ prefix.
-# Nesting uses double underscores: APP__DATABASES__0__HOST=myhost
+# All settings support environment variable overrides with the PGSENSE__ prefix.
+# Nesting uses double underscores: PGSENSE__DATABASES__0__HOST=myhost
 #
 # Settings shown commented out are optional and display their default values.
 # Uncomment and change only what you need.
@@ -27,6 +27,7 @@ host = "localhost"
 dbname = "mydb"
 username = "postgres"
 password = "postgres"
+# password_file = "/run/secrets/db-password"  # reads password from file; takes precedence over password
 # publication = "pgsense_pub"    # must exist: CREATE PUBLICATION pgsense_pub FOR ALL TABLES;
 # tls.enabled = false
 # tls.trusted_root_certs = "/path/to/ca.pem"

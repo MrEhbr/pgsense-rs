@@ -41,6 +41,8 @@ pub struct PostgresAlertConfig {
     pub username: String,
     #[serde(skip_serializing)]
     pub password: Option<SecretString>,
+    #[serde(skip_serializing)]
+    pub password_file: Option<PathBuf>,
     pub schema: String,
     pub table: String,
     pub tls: TlsSettings,
@@ -55,6 +57,7 @@ impl Default for PostgresAlertConfig {
             dbname: "postgres".to_string(),
             username: "postgres".to_string(),
             password: None,
+            password_file: None,
             schema: "pgsense".to_string(),
             table: "findings".to_string(),
             tls: TlsSettings::default(),

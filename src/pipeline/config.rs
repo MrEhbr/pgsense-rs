@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::{Result, bail};
 use etl::config::{BatchConfig, PgConnectionConfig, PipelineConfig, TableSyncCopyConfig, TlsConfig};
 use secrecy::SecretString;
@@ -16,6 +18,10 @@ pub struct DatabaseConfig {
     pub username: String,
     #[serde(skip_serializing)]
     pub password: Option<SecretString>,
+    /// Path to a file containing the password. Takes precedence over
+    /// `password` if set.
+    #[serde(skip_serializing)]
+    pub password_file: Option<PathBuf>,
     pub publication: String,
     pub tls: TlsSettings,
     /// Optional per-database scan filter. Overrides the top-level `[scan]`
@@ -66,6 +72,7 @@ impl Default for DatabaseConfig {
             dbname: "postgres".to_string(),
             username: "postgres".to_string(),
             password: None,
+            password_file: None,
             publication: "pgsense_pub".to_string(),
             tls: TlsSettings::default(),
             scan: None,
@@ -103,6 +110,8 @@ pub struct PostgresStoreConfig {
     pub username: String,
     #[serde(skip_serializing)]
     pub password: Option<SecretString>,
+    #[serde(skip_serializing)]
+    pub password_file: Option<PathBuf>,
     pub schema: String,
     pub tls: TlsSettings,
 }
@@ -115,6 +124,7 @@ impl Default for PostgresStoreConfig {
             dbname: "postgres".to_string(),
             username: "postgres".to_string(),
             password: None,
+            password_file: None,
             schema: "pgsense".to_string(),
             tls: TlsSettings::default(),
         }

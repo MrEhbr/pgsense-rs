@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use pgsense_rs::{
     alerts::{config::PostgresAlertConfig, postgres::PostgresChannel},
-    pipeline::config::TlsSettings,
     rules::config::Severity,
     scanner::Finding,
 };
@@ -40,15 +39,11 @@ async fn setup() -> TestHarness {
     let pg = PgContainer::start().await;
 
     let config = PostgresAlertConfig {
-        name: None,
         host: pg.host.clone(),
         port: pg.port,
-        dbname: "postgres".to_string(),
-        username: "postgres".to_string(),
         password: Some(SecretString::from("postgres")),
         schema: "pgsense_alerts".to_string(),
-        table: "findings".to_string(),
-        tls: TlsSettings::default(),
+        ..Default::default()
     };
 
     let mut last_err = None;

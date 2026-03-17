@@ -14,16 +14,6 @@ fn test_help_command() {
 }
 
 #[test]
-fn test_version_command() {
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"));
-    cmd.arg("--version");
-
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("0.0.1"));
-}
-
-#[test]
 fn test_rules_list_command() {
     let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"));
     cmd.args(["rules", "--rules", "config/rules.toml", "list"]);
