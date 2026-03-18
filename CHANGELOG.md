@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 ---
+## [0.2.0](https://github.com/MrEhbr/pgsense-rs/compare/v0.1.0..v0.2.0) - 2026-03-18
+
+### Bug Fixes
+
+- **(ci)** disable macOS aarch64-apple-darwin cross-compilation build - ([150be2f](https://github.com/MrEhbr/pgsense-rs/commit/150be2f186c79994af9d0d350918223ba00b79b6)) - Aleksei Burmistrov
+### Features
+
+- **(config)** add password_file support and PGSENSE prefix - ([aef34a9](https://github.com/MrEhbr/pgsense-rs/commit/aef34a902b2fd32313fde462bc2b3c338ea90cbd)) - Aleksei Burmistrov
+- **(helm)** add Helm chart - ([d364acb](https://github.com/MrEhbr/pgsense-rs/commit/d364acbcf01b91a518587f0f348c02c7aa73deee)) - Aleksei Burmistrov
+- **(helm)** add Grafana dashboard - ([5c5d633](https://github.com/MrEhbr/pgsense-rs/commit/5c5d633e03fa94988641f665ef883762e3d86100)) - Aleksei Burmistrov
+### Miscellaneous Chores
+
+- **(release)** bundle rules.toml in Docker image and archives - ([ca736a5](https://github.com/MrEhbr/pgsense-rs/commit/ca736a5f49f9d55b186e9b3900a103955be82bd6)) - Aleksei Burmistrov
 ## [0.1.0] - 2026-03-17
 
 ### Bug Fixes
