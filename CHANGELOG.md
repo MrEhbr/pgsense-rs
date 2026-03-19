@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 ---
+## [0.3.0](https://github.com/MrEhbr/pgsense-rs/compare/v0.2.0..v0.3.0) - 2026-03-19
+
+### CI/CD
+
+- **(helm)** publish chart to GHCR OCI registry on release - ([cf154f4](https://github.com/MrEhbr/pgsense-rs/commit/cf154f44e0fb1f4eddbdec09cc5adb96f46fed98)) - Aleksei Burmistrov
+### Features
+
+- **(helm)** use adaptive intervals and add process panels - ([6b31652](https://github.com/MrEhbr/pgsense-rs/commit/6b3165281769b2cbd8487e1ec8aef1eab1bbd842)) - Aleksei Burmistrov
 ## [0.2.0](https://github.com/MrEhbr/pgsense-rs/compare/v0.1.0..v0.2.0) - 2026-03-18
 
 ### Bug Fixes
