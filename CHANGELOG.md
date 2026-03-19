@@ -3,6 +3,11 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 ---
+## [0.4.0](https://github.com/MrEhbr/pgsense-rs/compare/v0.3.0..v0.4.0) - 2026-03-19
+
+### Features
+
+- **(helm)** expose full config and fix image repository - ([c4b60fc](https://github.com/MrEhbr/pgsense-rs/commit/c4b60fc46c97dda16910575112315b48c01b65f6)) - Aleksei Burmistrov
 ## [0.3.0](https://github.com/MrEhbr/pgsense-rs/compare/v0.2.0..v0.3.0) - 2026-03-19
 
 ### CI/CD
