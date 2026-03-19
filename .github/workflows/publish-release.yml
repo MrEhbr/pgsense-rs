@@ -76,3 +76,17 @@ jobs:
           DOCKER_REGISTRY: ghcr.io
           DOCKER_USERNAME: ${{ github.actor }}
           DOCKER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set chart version
+        id: chart
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Helm chart to GHCR
+        uses: appany/helm-oci-chart-releaser@v0.4.2
+        with:
+          name: pgsense
+          repository: mrehbr/charts
+          tag: ${{ steps.chart.outputs.version }}
+          registry: ghcr.io
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}

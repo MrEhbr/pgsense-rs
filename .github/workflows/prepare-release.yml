@@ -72,6 +72,14 @@ jobs:
           cargo set-version --workspace $VERSION_NO_V
           echo "Updated all workspace crates to version $VERSION_NO_V"
 
+      - name: Update Helm chart version
+        run: |
+          VERSION_NO_V="${{ steps.version.outputs.version }}"
+          VERSION_NO_V="${VERSION_NO_V#v}"
+          sed -i "s/^version:.*/version: $VERSION_NO_V/" charts/pgsense/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"$VERSION_NO_V\"/" charts/pgsense/Chart.yaml
+          echo "Updated Chart.yaml to version $VERSION_NO_V"
+
       - name: Update CHANGELOG.md
         uses: orhun/git-cliff-action@v4
         with:
@@ -101,7 +109,7 @@ jobs:
       - name: Commit version and changelog changes
         run: |
           shopt -s nullglob
-          git add Cargo.toml Cargo.lock CHANGELOG.md crates/*/Cargo.toml crates/*/CHANGELOG.md
+          git add Cargo.toml Cargo.lock CHANGELOG.md crates/*/Cargo.toml crates/*/CHANGELOG.md charts/pgsense/Chart.yaml
           git commit -m "chore(release): bump version to ${{ steps.version.outputs.version }}"
           echo "Committed version and changelog changes"
 
