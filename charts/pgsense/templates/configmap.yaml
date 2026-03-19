@@ -61,10 +61,18 @@ data:
     username = {{ default "postgres" .Values.pipeline.store.postgres.username | quote }}
     {{- if .Values.pipeline.store.postgres.password }}
     password = {{ .Values.pipeline.store.postgres.password | quote }}
+    {{- else if and .Values.pipeline.store.postgres.passwordSecret .Values.pipeline.store.postgres.passwordSecret.name }}
+    password_file = "/secrets/store-postgres/{{ .Values.pipeline.store.postgres.passwordSecret.key }}"
     {{- else if .Values.pipeline.store.postgres.passwordFile }}
     password_file = {{ .Values.pipeline.store.postgres.passwordFile | quote }}
     {{- end }}
     schema = {{ default "pgsense" .Values.pipeline.store.postgres.schema | quote }}
+    {{- if .Values.pipeline.store.postgres.tls }}
+    tls.enabled = {{ default false .Values.pipeline.store.postgres.tls.enabled }}
+    {{- if .Values.pipeline.store.postgres.tls.trustedRootCerts }}
+    tls.trusted_root_certs = {{ .Values.pipeline.store.postgres.tls.trustedRootCerts | quote }}
+    {{- end }}
+    {{- end }}
     {{- end }}
     {{- if .Values.pipeline.store.sqlite }}
     [pipeline.store.sqlite]
@@ -94,6 +102,9 @@ data:
 
     [alerts.jsonl]
     enabled = {{ .Values.alerts.jsonl.enabled }}
+    {{- if .Values.alerts.jsonl.name }}
+    name = {{ .Values.alerts.jsonl.name | quote }}
+    {{- end }}
     path = {{ .Values.alerts.jsonl.path | quote }}
 
     {{- range .Values.alerts.webhooks }}
@@ -103,6 +114,12 @@ data:
     {{- end }}
     url = {{ .url | quote }}
     timeout_ms = {{ default 5000 .timeout_ms }}
+    {{- if .headers }}
+    [alerts.webhooks.headers]
+    {{- range $key, $value := .headers }}
+    {{ $key }} = {{ $value | quote }}
+    {{- end }}
+    {{- end }}
     {{- end }}
 
     {{- range .Values.alerts.slack }}
@@ -112,22 +129,43 @@ data:
     {{- end }}
     token = {{ .token | quote }}
     channel = {{ .channel | quote }}
+    {{- if .username }}
+    username = {{ .username | quote }}
+    {{- end }}
+    {{- if .icon_emoji }}
+    icon_emoji = {{ .icon_emoji | quote }}
+    {{- end }}
+    timeout_ms = {{ default 5000 .timeout_ms }}
+    batch_size = {{ default 8 .batch_size }}
+    batch_window_ms = {{ default 2000 .batch_window_ms }}
+    max_retries = {{ default 3 .max_retries }}
     {{- end }}
 
     {{- if .Values.alerts.postgres }}
     {{- with .Values.alerts.postgres }}
     [alerts.postgres]
+    {{- if .name }}
+    name = {{ .name | quote }}
+    {{- end }}
     host = {{ .host | quote }}
     port = {{ default 5432 .port }}
     dbname = {{ default "postgres" .dbname | quote }}
     username = {{ default "postgres" .username | quote }}
     {{- if .password }}
     password = {{ .password | quote }}
+    {{- else if and .passwordSecret .passwordSecret.name }}
+    password_file = "/secrets/alerts-postgres/{{ .passwordSecret.key }}"
     {{- else if .passwordFile }}
     password_file = {{ .passwordFile | quote }}
     {{- end }}
     schema = {{ default "pgsense" .schema | quote }}
     table = {{ default "findings" .table | quote }}
+    {{- if .tls }}
+    tls.enabled = {{ default false .tls.enabled }}
+    {{- if .tls.trustedRootCerts }}
+    tls.trusted_root_certs = {{ .tls.trustedRootCerts | quote }}
+    {{- end }}
+    {{- end }}
     {{- end }}
     {{- end }}
 

@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/ehbr/pgsense-rs
+  repository: ghcr.io/mrehbr/pgsense-rs
   pullPolicy: IfNotPresent
   # Overrides the image tag (default is chart appVersion)
   tag: ""
@@ -67,7 +67,23 @@ pipeline:
   tableErrorRetryDelayMs: 10000
   tableErrorRetryMaxAttempts: 5
   maxTableSyncWorkers: 4
-  # -- Pipeline store backend: "memory", or an object with postgres/sqlite key
+  # -- Pipeline store backend: "memory", or an object with postgres/sqlite key.
+  # store:
+  #   postgres:
+  #     host: localhost
+  #     port: 5432
+  #     dbname: postgres
+  #     username: postgres
+  #     password: postgres              # inline password
+  #     passwordSecret:                 # or from K8s Secret
+  #       name: my-secret
+  #       key: password
+  #     schema: pgsense
+  #     tls:
+  #       enabled: false
+  #       trustedRootCerts: ""
+  #   sqlite:
+  #     path: pgsense-state.db
   store: memory
 
 log:
@@ -83,10 +99,44 @@ alerts:
     enabled: false
   jsonl:
     enabled: false
+    # name: ""
     path: /tmp/alerts.jsonl
+  # -- Webhook channels (repeatable).
+  # webhooks:
+  #   - name: security-webhook
+  #     url: https://hooks.example.com/alert
+  #     timeout_ms: 5000
+  #     headers:
+  #       Authorization: "Bearer token123"
   webhooks: []
+  # -- Slack channels (repeatable).
+  # slack:
+  #   - name: security-slack
+  #     token: xoxb-your-bot-token
+  #     channel: "#pgsense-alerts"
+  #     username: pgsense-bot
+  #     icon_emoji: ":shield:"
+  #     timeout_ms: 5000
+  #     batch_size: 8
+  #     batch_window_ms: 2000
+  #     max_retries: 3
   slack: []
-  # -- PostgreSQL alert channel config
+  # -- PostgreSQL alert channel config.
+  # postgres:
+  #   name: postgres
+  #   host: localhost
+  #   port: 5432
+  #   dbname: postgres
+  #   username: postgres
+  #   password: postgres                # inline password
+  #   passwordSecret:                   # or from K8s Secret
+  #     name: my-secret
+  #     key: password
+  #   schema: pgsense
+  #   table: findings
+  #   tls:
+  #     enabled: false
+  #     trustedRootCerts: ""
   postgres: {}
 
 server:
