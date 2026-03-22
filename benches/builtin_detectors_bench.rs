@@ -104,5 +104,28 @@ fn bench_email(c: &mut Criterion) {
     bench_detector_scaling(c, "email_scan", Detector::Email, "alice@example.com", &[64, 256, 1024, 4096]);
 }
 
-criterion_group!(benches, bench_credit_card, bench_ssn, bench_phone, bench_email);
+fn bench_iban(c: &mut Criterion) {
+    // Near-misses: valid country codes but wrong length/check digits
+    let near_misses = ["DE0037040044053201300", "GB00NWBK60161331926819", "FR0030006000011234567890189"].join(" ");
+
+    bench_detector_cases(
+        c,
+        "iban_scan",
+        Detector::Iban,
+        &[
+            ("short_match", "pay to DE89370400440532013000 please"),
+            ("short_no_match", "just some ordinary text here"),
+            (
+                "multiple_matches",
+                "send DE89370400440532013000 and GB29NWBK60161331926819 to NL91ABNA0417164300",
+            ),
+            ("spaced_match", "DE89 3704 0044 0532 0130 00"),
+            ("near_misses_3", &near_misses),
+        ],
+    );
+
+    bench_detector_scaling(c, "iban_scan", Detector::Iban, "DE89370400440532013000", &[64, 256, 1024, 4096]);
+}
+
+criterion_group!(benches, bench_credit_card, bench_ssn, bench_phone, bench_email, bench_iban);
 criterion_main!(benches);

@@ -25,3 +25,7 @@ path = "targets/phones.rs"
 [[bin]]
 name = "emails"
 path = "targets/emails.rs"
+
+[[bin]]
+name = "ibans"
+path = "targets/ibans.rs"

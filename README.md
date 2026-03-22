@@ -22,7 +22,7 @@ PostgreSQL WAL → etl Pipeline → Scanner → Rule Engine → Alert Dispatcher
 2. **Scanner** — Filters out non-text columns (integers, booleans, timestamps, UUIDs, bytea) to reduce noise, then passes text values to the rule engine
 3. **Rule Engine** — Three-phase detection:
    - **Regex rules** — RegexSet fast-path for bulk filtering, then individual regex match + optional validator (Luhn, SSN checksum, phone, email)
-   - **Builtin detectors** — Algorithmic scanning with boundary-aware matching (credit cards, SSNs, phone numbers, email addresses)
+   - **Builtin detectors** — Algorithmic scanning with boundary-aware matching (credit cards, IBANs, SSNs, phone numbers, email addresses)
    - **Rhai scripts** — Custom detection logic in sandboxed scripts
 4. **Alert Dispatcher** — Deduplicates findings by (schema, table, column, rule, value) within a configurable window, then routes to named alert channels (all channels by default, or specific channels per rule)
 

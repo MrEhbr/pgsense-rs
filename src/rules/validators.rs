@@ -184,6 +184,32 @@ pub fn ssn(s: &str) -> bool {
     true
 }
 
+/// Validate an IBAN check digit using ISO 7064 mod-97-10.
+/// Separators (spaces and dashes) are stripped before validation.
+pub fn iban(s: &str) -> bool {
+    let compact: Vec<u8> = s.bytes().filter(|b| b.is_ascii_alphanumeric()).collect();
+    if compact.len() < 15 {
+        return false;
+    }
+
+    // Move first 4 chars to end, convert letters A=10..Z=35, compute mod 97
+    let rearranged = compact[4..].iter().chain(compact[..4].iter());
+    let mut remainder: u32 = 0;
+
+    for &b in rearranged {
+        if b.is_ascii_digit() {
+            remainder = (remainder * 10 + u32::from(b - b'0')) % 97;
+        } else if b.is_ascii_uppercase() {
+            let val = u32::from(b - b'A') + 10;
+            remainder = (remainder * 100 + val) % 97;
+        } else {
+            return false;
+        }
+    }
+
+    remainder == 1
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
@@ -269,5 +295,21 @@ mod tests {
     #[case("", false)]
     fn phone_validation(#[case] input: &str, #[case] expected: bool) {
         assert_eq!(phone(input), expected, "phone({input:?})");
+    }
+
+    #[rstest]
+    #[case("DE89370400440532013000", true)]
+    #[case("GB29NWBK60161331926819", true)]
+    #[case("FR7630006000011234567890189", true)]
+    #[case("ES9121000418450200051332", true)]
+    #[case("NL91ABNA0417164300", true)]
+    #[case("NO9386011117947", true)]
+    #[case("DE89 3704 0044 0532 0130 00", true)]
+    #[case("DE89-3704-0044-0532-0130-00", true)]
+    #[case("DE00370400440532013000", false)]
+    #[case("NOTANIBAN", false)]
+    #[case("", false)]
+    fn iban_validation(#[case] input: &str, #[case] expected: bool) {
+        assert_eq!(iban(input), expected, "iban({input:?})");
     }
 }

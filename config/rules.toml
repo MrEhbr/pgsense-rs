@@ -119,6 +119,14 @@ category = "PII"
 severity = "high"
 builtin = "email"
 
+[[rules]]
+type = "builtin"
+id = "iban"
+description = "International Bank Account Numbers (IBAN)"
+category = "PII"
+severity = "high"
+builtin = "iban"
+
 [rules.allowlist]
 description = "System and test email addresses"
 values = ["noreply@example.com", "no-reply@example.com"]

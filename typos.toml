@@ -4,3 +4,5 @@
 [default.extend-words]
 ue = "ue"
 Hashi = "Hashi"
+BA = "BA"  # Bosnia and Herzegovina (IBAN country code)
+FO = "FO"  # Faroe Islands (IBAN country code)

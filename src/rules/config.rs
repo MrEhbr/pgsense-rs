@@ -66,6 +66,7 @@ impl fmt::Display for RuleType {
 pub enum BuiltinKind {
     CreditCard,
     Email,
+    Iban,
     Phone,
     Ssn,
 }
