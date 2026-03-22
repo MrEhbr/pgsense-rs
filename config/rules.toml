@@ -38,18 +38,6 @@
 # --- Regex rules ---
 
 # [[rules]]
-# id = "email-address"
-# description = "Email addresses"
-# category = "PII"
-# severity = "high"
-# pattern = '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-#
-# [rules.allowlist]
-# description = "Internal test emails"
-# values = ["test@example.com"]
-# patterns = ['.*@example\.com$']
-
-# [[rules]]
 # id = "credit-card-regex"
 # description = "Credit card numbers (pattern + Luhn check)"
 # category = "PCI_DSS"
@@ -122,6 +110,28 @@ description = "Phone numbers (E.164, NANP, international 00-prefix)"
 category = "PII"
 severity = "high"
 builtin = "phone"
+
+[[rules]]
+type = "builtin"
+id = "email-address"
+description = "Email addresses"
+category = "PII"
+severity = "high"
+builtin = "email"
+
+[rules.allowlist]
+description = "System and test email addresses"
+values = ["noreply@example.com", "no-reply@example.com"]
+patterns = [
+    '.*@example\.com$',
+    '.*@example\.org$',
+    '.*@test\.com$',
+    '.*@localhost$',
+    '^noreply@',
+    '^no-reply@',
+    '^mailer-daemon@',
+    '^postmaster@',
+]
 
 # --- Secrets detection (curated from gitleaks) ---
 #

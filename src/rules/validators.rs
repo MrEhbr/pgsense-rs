@@ -1,6 +1,51 @@
 /// Luhn-doubled values: index d maps to (d*2) with digit-sum reduction.
 const LUHN_DOUBLE: [u8; 10] = [0, 2, 4, 6, 8, 1, 3, 5, 7, 9];
 
+/// Lookup table for valid email local-part characters (RFC 5321 dot-atom).
+const EMAIL_LOCAL_CHAR: [bool; 128] = {
+    let mut t = [false; 128];
+    let mut b = b'a';
+    while b <= b'z' {
+        t[b as usize] = true;
+        b += 1;
+    }
+    b = b'A';
+    while b <= b'Z' {
+        t[b as usize] = true;
+        b += 1;
+    }
+    b = b'0';
+    while b <= b'9' {
+        t[b as usize] = true;
+        b += 1;
+    }
+    t[b'.' as usize] = true;
+    t[b'!' as usize] = true;
+    t[b'#' as usize] = true;
+    t[b'$' as usize] = true;
+    t[b'%' as usize] = true;
+    t[b'&' as usize] = true;
+    t[b'\'' as usize] = true;
+    t[b'*' as usize] = true;
+    t[b'+' as usize] = true;
+    t[b'/' as usize] = true;
+    t[b'=' as usize] = true;
+    t[b'?' as usize] = true;
+    t[b'^' as usize] = true;
+    t[b'_' as usize] = true;
+    t[b'`' as usize] = true;
+    t[b'{' as usize] = true;
+    t[b'|' as usize] = true;
+    t[b'}' as usize] = true;
+    t[b'~' as usize] = true;
+    t[b'-' as usize] = true;
+    t
+};
+
+pub(crate) fn is_email_local_char(b: u8) -> bool {
+    b.is_ascii() && EMAIL_LOCAL_CHAR[b as usize]
+}
+
 /// Strips non-digit characters before checking.
 pub fn luhn(s: &str) -> bool {
     let mut digits = [0u8; 19];
@@ -44,6 +89,67 @@ pub fn phone(s: &str) -> bool {
         PHONE_NUMBER_UTIL.parse_with_default_region(s, "US")
     }
     .is_ok_and(|n| n.is_valid())
+}
+
+/// Validate an email address structure.
+/// Checks local part (1-64 chars, valid charset, no
+/// leading/trailing/consecutive dots), domain (labels split by `.`, each 1-63
+/// chars, no leading/trailing hyphen), and TLD (>= 2 alpha chars).
+pub fn email(s: &str) -> bool {
+    let Some(at_pos) = s.find('@') else { return false };
+    if s[at_pos + 1..].contains('@') {
+        return false;
+    }
+
+    let local = &s[..at_pos];
+    let domain = &s[at_pos + 1..];
+
+    if local.is_empty() || local.len() > 64 {
+        return false;
+    }
+    if local.starts_with('.') || local.ends_with('.') {
+        return false;
+    }
+    if local.as_bytes().windows(2).any(|w| w == b"..") {
+        return false;
+    }
+    if !local.as_bytes().iter().all(|&b| is_email_local_char(b)) {
+        return false;
+    }
+
+    if domain.is_empty() || domain.len() > 253 {
+        return false;
+    }
+    let mut label_count = 0u32;
+    let mut last_label = "";
+    for label in domain.split('.') {
+        if label.is_empty() || label.len() > 63 {
+            return false;
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            return false;
+        }
+        for &b in label.as_bytes() {
+            if !(b.is_ascii_alphanumeric() || b == b'-') {
+                return false;
+            }
+        }
+        last_label = label;
+        label_count += 1;
+    }
+
+    if label_count < 2 {
+        return false;
+    }
+    if last_label.len() < 2 {
+        return false;
+    }
+    // Intentionally rejects punycode/IDN TLDs (e.g. xn--p1ai) — targets common PII
+    // patterns
+    last_label
+        .as_bytes()
+        .iter()
+        .all(|b| b.is_ascii_alphabetic())
 }
 
 /// Validate a US Social Security Number format and check for invalid ranges.
@@ -117,6 +223,37 @@ mod tests {
     #[case("", false)]
     fn ssn_validation(#[case] input: &str, #[case] expected: bool) {
         assert_eq!(ssn(input), expected, "ssn({input:?})");
+    }
+
+    #[rstest]
+    #[case("user@example.com", true)]
+    #[case("first.last@domain.co.uk", true)]
+    #[case("user+tag@sub.example.com", true)]
+    #[case("a@b.cc", true)]
+    #[case("user_name@example.com", true)]
+    #[case("user@localhost", false)]
+    #[case("user@.com", false)]
+    #[case("user@domain.", false)]
+    #[case(".user@example.com", false)]
+    #[case("user.@example.com", false)]
+    #[case("user..name@example.com", false)]
+    #[case("@example.com", false)]
+    #[case("user@", false)]
+    #[case("user@-host.com", false)]
+    #[case("user@host-.com", false)]
+    #[case("user@example.1", false)]
+    #[case("user@example.c", false)]
+    #[case("", false)]
+    // Boundary lengths
+    #[case("abcdefghijklmnopqrstuvwxyz.abcdefghijklmnopqrstuvwxyz.abcdefghij@example.com", true)] // local = 64
+    #[case("abcdefghijklmnopqrstuvwxyz.abcdefghijklmnopqrstuvwxyz.abcdefghijk@example.com", false)] // local = 65
+    // Numeric non-TLD labels
+    #[case("user@123.com", true)]
+    #[case("user@example.co2", false)]
+    // Punycode TLD intentionally rejected
+    #[case("user@example.xn--p1ai", false)]
+    fn email_validation(#[case] input: &str, #[case] expected: bool) {
+        assert_eq!(email(input), expected, "email({input:?})");
     }
 
     #[rstest]

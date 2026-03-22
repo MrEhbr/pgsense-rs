@@ -36,5 +36,19 @@ fn bench_ssn(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benches, bench_luhn, bench_ssn);
+fn bench_email(c: &mut Criterion) {
+    bench_cases(
+        c,
+        "validator/email",
+        &[
+            ("valid_simple", "user@example.com"),
+            ("valid_complex", "first.last+tag@sub.example.co.uk"),
+            ("invalid_no_tld", "user@localhost"),
+            ("invalid_double_dot", "user..name@example.com"),
+        ],
+        validators::email,
+    );
+}
+
+criterion_group!(benches, bench_luhn, bench_ssn, bench_email);
 criterion_main!(benches);

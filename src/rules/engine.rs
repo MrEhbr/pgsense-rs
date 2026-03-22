@@ -447,6 +447,23 @@ mod tests {
     }
 
     #[test]
+    fn email_builtin_through_engine() {
+        let configs = vec![RuleConfig {
+            rule_type: RuleType::Builtin,
+            builtin: Some(BuiltinKind::Email),
+            ..cfg("email")
+        }];
+        let engine = RuleEngine::new(&configs).unwrap();
+
+        let m = engine.scan_value("contact alice@example.com now");
+        assert_eq!(m.len(), 1);
+        assert_eq!(m[0].rule.id, "email");
+        assert_eq!(m[0].matched_text, "alice@example.com");
+
+        assert!(engine.scan_value("no email here").is_empty());
+    }
+
+    #[test]
     fn phone_builtin_through_engine() {
         let configs = vec![RuleConfig {
             rule_type: RuleType::Builtin,

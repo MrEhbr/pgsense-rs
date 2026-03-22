@@ -88,5 +88,21 @@ fn bench_phone(c: &mut Criterion) {
     bench_detector_scaling(c, "phone_scan", Detector::Phone, "+44 20 7946 0958", &[64, 256, 1024, 4096]);
 }
 
-criterion_group!(benches, bench_credit_card, bench_ssn, bench_phone);
+fn bench_email(c: &mut Criterion) {
+    bench_detector_cases(
+        c,
+        "email_scan",
+        Detector::Email,
+        &[
+            ("short_match", "contact user@example.com for info"),
+            ("short_no_match", "just some ordinary text here"),
+            ("multiple_matches", "from alice@corp.io to bob@example.com and carol@test.org"),
+            ("near_misses", "user@ @domain.com user@.com @@ user@domain"),
+        ],
+    );
+
+    bench_detector_scaling(c, "email_scan", Detector::Email, "alice@example.com", &[64, 256, 1024, 4096]);
+}
+
+criterion_group!(benches, bench_credit_card, bench_ssn, bench_phone, bench_email);
 criterion_main!(benches);
