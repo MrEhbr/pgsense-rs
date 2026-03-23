@@ -245,7 +245,14 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::rules::config::{Allowlist, BuiltinKind, RuleScope, Validator};
+    use crate::{
+        pattern::PatternMatcher,
+        rules::config::{Allowlist, BuiltinKind, RuleScope, Validator},
+    };
+
+    fn pm(patterns: &[&str]) -> PatternMatcher {
+        PatternMatcher::compile(patterns.iter().map(|s| s.to_string()).collect()).unwrap()
+    }
 
     fn cfg(id: &str) -> RuleConfig {
         RuleConfig {
@@ -294,8 +301,8 @@ mod tests {
         let err = RuleEngine::new(&[RuleConfig {
             pattern: Some(r"\bfoo\b".into()),
             scope: Some(RuleScope {
-                include_tables: vec!["users".into()],
-                exclude_tables: vec!["users".into()],
+                include_tables: pm(&["users"]),
+                exclude_tables: pm(&["users"]),
                 ..Default::default()
             }),
             ..cfg("bad-scope")
@@ -312,8 +319,8 @@ mod tests {
         let err = RuleEngine::new(&[RuleConfig {
             pattern: Some(r"\bfoo\b".into()),
             scope: Some(RuleScope {
-                include_columns: vec!["email".into()],
-                exclude_columns: vec!["email".into()],
+                include_columns: pm(&["email"]),
+                exclude_columns: pm(&["email"]),
                 ..Default::default()
             }),
             ..cfg("bad-scope")

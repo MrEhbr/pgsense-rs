@@ -6,7 +6,7 @@ use etl::{
     types::{Event, TableId, TableRow},
 };
 use tokio::sync::{RwLock, mpsc};
-use tracing::{debug, info, trace};
+use tracing::{debug, trace};
 
 use crate::{
     events::{ColumnMeta, ScanEvent, TableMeta, extract_scan_events},
@@ -29,15 +29,6 @@ pub struct ScannerDestination {
 
 impl ScannerDestination {
     pub fn new(database: String, filter: ScanFilter, event_tx: mpsc::Sender<Vec<ScanEvent>>, table_registry: TableRegistry) -> Self {
-        if !filter.include_schemas.is_empty() || !filter.exclude_tables.is_empty() || !filter.exclude_columns.is_empty() {
-            info!(
-                database = %database,
-                include_schemas = ?filter.include_schemas,
-                exclude_tables = ?filter.exclude_tables,
-                exclude_columns = ?filter.exclude_columns,
-                "scan filter active"
-            );
-        }
         Self {
             database,
             filter,

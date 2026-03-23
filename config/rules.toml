@@ -28,12 +28,13 @@
 #   patterns    — regex patterns; if any matches, finding is suppressed
 #
 # Scope (optional, restricts where the rule applies):
+# All scope fields support exact strings and glob patterns (* and ? wildcards).
 #   [rules.scope]
-#   include_schemas  — only scan these schemas (default: all)
-#   include_tables   — only scan these tables (default: all)
-#   exclude_tables   — skip these tables
-#   include_columns  — only scan these columns (default: all)
-#   exclude_columns  — skip these columns
+#   include_schemas  — only scan these schemas (default: all); e.g. ["public", "app_*"]
+#   include_tables   — only scan these tables (default: all); e.g. ["user*", "employees"]
+#   exclude_tables   — skip these tables; e.g. ["audit_*", "tmp_*"]
+#   include_columns  — only scan these columns (default: all); e.g. ["email", "ssn*"]
+#   exclude_columns  — skip these columns; e.g. ["*_hash", "*_encrypted"]
 
 # --- Regex rules ---
 
@@ -55,8 +56,8 @@
 # severity = "critical"
 # builtin = "ssn"
 # [rules.scope]
-# include_tables = ["users", "employees"]
-# exclude_columns = ["ssn_hash"]
+# include_tables = ["users", "employee*"]   # exact + glob: matches "users", "employees", "employee_archive"
+# exclude_columns = ["*_hash"]              # skip any hashed column
 
 # --- Per-rule channel routing ---
 #

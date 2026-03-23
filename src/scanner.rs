@@ -4,30 +4,35 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     events::{ScanEvent, is_scannable_type},
+    pattern::PatternMatcher,
     rules::{config::Severity, engine::RuleEngine, masking},
 };
 
+/// Per-database scan filter (include schemas, exclude tables/columns).
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(default)]
 pub struct ScanFilter {
-    #[serde(default)]
-    pub include_schemas: Vec<String>,
-    #[serde(default)]
-    pub exclude_tables: Vec<String>,
-    #[serde(default)]
-    pub exclude_columns: Vec<String>,
+    pub include_schemas: PatternMatcher,
+    pub exclude_tables: PatternMatcher,
+    pub exclude_columns: PatternMatcher,
 }
 
 impl ScanFilter {
+    /// Returns `true` if the schema should be scanned.
+    ///
+    /// When `include_schemas` is empty, all schemas are allowed.
     pub fn matches_schema(&self, schema: &str) -> bool {
-        self.include_schemas.is_empty() || self.include_schemas.iter().any(|s| s == schema)
+        self.include_schemas.is_empty() || self.include_schemas.is_match(schema)
     }
 
+    /// Returns `true` if the table should be scanned.
     pub fn matches_table(&self, table: &str) -> bool {
-        !self.exclude_tables.iter().any(|t| t == table)
+        !self.exclude_tables.is_match(table)
     }
 
+    /// Returns `true` if the column should be included.
     pub fn should_include_column(&self, column: &str) -> bool {
-        !self.exclude_columns.iter().any(|c| c == column)
+        !self.exclude_columns.is_match(column)
     }
 }
 
@@ -128,6 +133,10 @@ mod tests {
         rules::config::{RuleConfig, RuleScope, RuleType, Severity},
     };
 
+    fn pm(patterns: &[&str]) -> PatternMatcher {
+        PatternMatcher::compile(patterns.iter().map(|s| s.to_string()).collect()).unwrap()
+    }
+
     const MATCH: &str = "ALPHA-1";
     const NO_MATCH: &str = "clean";
 
@@ -203,23 +212,35 @@ mod tests {
     }
 
     #[rstest::rstest]
-    #[case("schema_miss", ScanFilter { include_schemas: vec!["other".into()], ..Default::default() }, false)]
-    #[case("schema_hit", ScanFilter { include_schemas: vec!["public".into()], ..Default::default() }, true)]
-    #[case("schema_empty", ScanFilter::default(), true)]
-    #[case("table_excluded", ScanFilter { exclude_tables: vec!["t1".into()], ..Default::default() }, false)]
-    #[case("table_not_excluded", ScanFilter { exclude_tables: vec!["other".into()], ..Default::default() }, true)]
-    fn filter_matches_event(#[case] _label: &str, #[case] filter: ScanFilter, #[case] expected: bool) {
-        assert_eq!(filter.matches_schema("public") && filter.matches_table("t1"), expected);
-    }
-
-    #[test]
-    fn filter_excludes_column() {
-        let filter = ScanFilter {
-            exclude_columns: vec!["c1".into()],
+    #[case("schema_miss", &["other"], &[], false)]
+    #[case("schema_hit", &["public"], &[], true)]
+    #[case("schema_empty", &[], &[], true)]
+    #[case("table_excluded", &[], &["t1"], false)]
+    #[case("table_not_excluded", &[], &["other"], true)]
+    #[case("glob_exclude_table_hit", &[], &["t*"], false)]
+    #[case("glob_exclude_table_miss", &[], &["audit_*"], true)]
+    #[case("glob_include_schema_hit", &["pub*"], &[], true)]
+    #[case("glob_include_schema_miss", &["staging_*"], &[], false)]
+    fn filter_matches_event(#[case] _label: &str, #[case] schemas: &[&str], #[case] tables: &[&str], #[case] expected: bool) {
+        let f = ScanFilter {
+            include_schemas: pm(schemas),
+            exclude_tables: pm(tables),
             ..Default::default()
         };
-        assert!(!filter.should_include_column("c1"));
-        assert!(filter.should_include_column("c2"));
+        assert_eq!(f.matches_schema("public") && f.matches_table("t1"), expected);
+    }
+
+    #[rstest::rstest]
+    #[case("exact_excluded", &["c1"], "c1", false)]
+    #[case("exact_not_excluded", &["c1"], "c2", true)]
+    #[case("glob_excluded", &["*_hash"], "password_hash", false)]
+    #[case("glob_not_excluded", &["*_hash"], "email", true)]
+    fn filter_column_exclusion(#[case] _label: &str, #[case] exclude: &[&str], #[case] column: &str, #[case] expected: bool) {
+        let f = ScanFilter {
+            exclude_columns: pm(exclude),
+            ..Default::default()
+        };
+        assert_eq!(f.should_include_column(column), expected);
     }
 
     #[test]
@@ -276,16 +297,20 @@ mod tests {
     }
 
     #[rstest::rstest]
-    #[case("include_table_match", RuleScope { include_tables: vec!["t1".into()], ..Default::default() }, true)]
-    #[case("include_table_miss", RuleScope { include_tables: vec!["other".into()], ..Default::default() }, false)]
-    #[case("exclude_table_match", RuleScope { exclude_tables: vec!["t1".into()], ..Default::default() }, false)]
-    #[case("exclude_table_miss", RuleScope { exclude_tables: vec!["other".into()], ..Default::default() }, true)]
-    #[case("include_schema_match", RuleScope { include_schemas: vec!["public".into()], ..Default::default() }, true)]
-    #[case("include_schema_miss", RuleScope { include_schemas: vec!["private".into()], ..Default::default() }, false)]
-    #[case("include_column_match", RuleScope { include_columns: vec!["c1".into()], ..Default::default() }, true)]
-    #[case("include_column_miss", RuleScope { include_columns: vec!["c2".into()], ..Default::default() }, false)]
-    #[case("exclude_column_match", RuleScope { exclude_columns: vec!["c1".into()], ..Default::default() }, false)]
-    #[case("exclude_column_miss", RuleScope { exclude_columns: vec!["other".into()], ..Default::default() }, true)]
+    #[case("include_table_match", RuleScope { include_tables: pm(&["t1"]), ..Default::default() }, true)]
+    #[case("include_table_miss", RuleScope { include_tables: pm(&["other"]), ..Default::default() }, false)]
+    #[case("exclude_table_match", RuleScope { exclude_tables: pm(&["t1"]), ..Default::default() }, false)]
+    #[case("exclude_table_miss", RuleScope { exclude_tables: pm(&["other"]), ..Default::default() }, true)]
+    #[case("include_schema_match", RuleScope { include_schemas: pm(&["public"]), ..Default::default() }, true)]
+    #[case("include_schema_miss", RuleScope { include_schemas: pm(&["private"]), ..Default::default() }, false)]
+    #[case("include_column_match", RuleScope { include_columns: pm(&["c1"]), ..Default::default() }, true)]
+    #[case("include_column_miss", RuleScope { include_columns: pm(&["c2"]), ..Default::default() }, false)]
+    #[case("exclude_column_match", RuleScope { exclude_columns: pm(&["c1"]), ..Default::default() }, false)]
+    #[case("exclude_column_miss", RuleScope { exclude_columns: pm(&["other"]), ..Default::default() }, true)]
+    #[case("glob_include_table_hit", RuleScope { include_tables: pm(&["t*"]), ..Default::default() }, true)]
+    #[case("glob_include_table_miss", RuleScope { include_tables: pm(&["user*"]), ..Default::default() }, false)]
+    #[case("glob_exclude_column_hit", RuleScope { exclude_columns: pm(&["c*"]), ..Default::default() }, false)]
+    #[case("glob_exclude_column_miss", RuleScope { exclude_columns: pm(&["*_hash"]), ..Default::default() }, true)]
     fn rule_scope_filtering(#[case] _label: &str, #[case] scope: RuleScope, #[case] expect_finding: bool) {
         let scanner = scanner_with_scope(scope);
         let event = test_event(vec![col("c1", Some(MATCH))]);
@@ -303,8 +328,8 @@ mod tests {
     #[test]
     fn scope_combined_include_and_exclude() {
         let scope = RuleScope {
-            include_tables: vec!["t1".into()],
-            exclude_columns: vec!["c1".into()],
+            include_tables: pm(&["t1"]),
+            exclude_columns: pm(&["c1"]),
             ..Default::default()
         };
         let scanner = scanner_with_scope(scope);

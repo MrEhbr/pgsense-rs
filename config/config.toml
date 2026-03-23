@@ -33,9 +33,10 @@ password = "postgres"
 # tls.trusted_root_certs = "/path/to/ca.pem"
 
 # Per-database scan filter (optional — overrides top-level [scan] for this database):
+# Supports exact strings and glob patterns (* and ? wildcards).
 # scan.include_schemas = ["public"]
-# scan.exclude_tables = ["audit_log"]
-# scan.exclude_columns = ["id"]
+# scan.exclude_tables = ["audit_*", "tmp_*"]    # glob: skip all audit_ and tmp_ tables
+# scan.exclude_columns = ["*_hash", "updated_at"]  # glob: skip any *_hash column
 
 # Additional database example:
 # [[databases]]
@@ -72,9 +73,9 @@ password = "postgres"
 # --- Scan filters (top-level defaults, can be overridden per database) ---
 
 # [scan]
-# include_schemas = []           # only scan these schemas (empty = all)
-# exclude_tables = []            # skip these tables
-# exclude_columns = []           # skip these columns globally
+# include_schemas = []           # only scan these schemas (empty = all); supports globs: ["staging_*"]
+# exclude_tables = []            # skip these tables; supports globs: ["audit_*", "tmp_*"]
+# exclude_columns = []           # skip these columns; supports globs: ["*_hash", "*_token"]
 
 # --- Alert channels ---
 

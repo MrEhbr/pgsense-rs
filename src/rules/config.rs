@@ -3,6 +3,8 @@ use std::{fmt, path::PathBuf};
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
+use crate::pattern::PatternMatcher;
+
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct Allowlist {
     #[serde(default)]
@@ -71,25 +73,27 @@ pub enum BuiltinKind {
     Ssn,
 }
 
+/// Per-rule scope filter (restrict which schema/table/column combinations a
+/// rule applies to).
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct RuleScope {
-    pub include_schemas: Vec<String>,
-    pub include_tables: Vec<String>,
-    pub exclude_tables: Vec<String>,
-    pub include_columns: Vec<String>,
-    pub exclude_columns: Vec<String>,
+    pub include_schemas: PatternMatcher,
+    pub include_tables: PatternMatcher,
+    pub exclude_tables: PatternMatcher,
+    pub include_columns: PatternMatcher,
+    pub exclude_columns: PatternMatcher,
 }
 
 impl RuleScope {
     pub fn validate(&self, rule_id: &str) -> Result<()> {
-        for t in &self.include_tables {
-            if self.exclude_tables.contains(t) {
+        for t in self.include_tables.raw() {
+            if self.exclude_tables.raw().contains(t) {
                 bail!("rule '{rule_id}': table '{t}' appears in both include_tables and exclude_tables");
             }
         }
-        for c in &self.include_columns {
-            if self.exclude_columns.contains(c) {
+        for c in self.include_columns.raw() {
+            if self.exclude_columns.raw().contains(c) {
                 bail!("rule '{rule_id}': column '{c}' appears in both include_columns and exclude_columns");
             }
         }
@@ -105,19 +109,19 @@ impl RuleScope {
     }
 
     pub fn matches(&self, schema: &str, table: &str, column: &str) -> bool {
-        if !self.include_schemas.is_empty() && !self.include_schemas.iter().any(|s| s == schema) {
+        if !self.include_schemas.is_empty() && !self.include_schemas.is_match(schema) {
             return false;
         }
-        if !self.include_tables.is_empty() && !self.include_tables.iter().any(|t| t == table) {
+        if !self.include_tables.is_empty() && !self.include_tables.is_match(table) {
             return false;
         }
-        if self.exclude_tables.iter().any(|t| t == table) {
+        if self.exclude_tables.is_match(table) {
             return false;
         }
-        if !self.include_columns.is_empty() && !self.include_columns.iter().any(|c| c == column) {
+        if !self.include_columns.is_empty() && !self.include_columns.is_match(column) {
             return false;
         }
-        if self.exclude_columns.iter().any(|c| c == column) {
+        if self.exclude_columns.is_match(column) {
             return false;
         }
         true

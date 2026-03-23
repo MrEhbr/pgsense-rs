@@ -7,6 +7,7 @@ pub mod config;
 pub mod events;
 pub mod logging;
 pub mod metrics;
+pub mod pattern;
 pub mod pipeline;
 pub mod rules;
 pub mod scanner;

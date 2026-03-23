@@ -78,6 +78,17 @@ impl PipelineRunner {
     ) -> Result<Self> {
         let database = db.database_id();
         let scan_filter = db.scan.clone().unwrap_or_default();
+
+        if !scan_filter.include_schemas.is_empty() || !scan_filter.exclude_tables.is_empty() || !scan_filter.exclude_columns.is_empty() {
+            info!(
+                database = %database,
+                include_schemas = ?scan_filter.include_schemas,
+                exclude_tables = ?scan_filter.exclude_tables,
+                exclude_columns = ?scan_filter.exclude_columns,
+                "scan filter active"
+            );
+        }
+
         let pg_connection = db.to_pg_connection_config();
         let table_registry: TableRegistry = Arc::new(RwLock::new(HashMap::new()));
 

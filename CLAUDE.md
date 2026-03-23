@@ -11,6 +11,11 @@ just lint               # Clippy (auto-fix) + rustfmt check
 just fmt                # Format code
 just bench              # Run criterion benchmarks
 just run scan -c config/config.toml  # Run the scanner
+just fuzz <target>      # Run AFL fuzz target (credit_cards, ssns, phones, emails, ibans)
+just dev                # Start dev environment (PG, Grafana, Prometheus)
+just dev-stop           # Stop dev environment
+just dev-clean          # Remove dev environment (volumes + orphans)
+just test-coverage      # Generate code coverage report (requires cargo-llvm-cov)
 ```
 
 ## Architecture
@@ -32,11 +37,16 @@ Key modules:
 - `pipeline/supervisor/` — `Supervisor` + `DatabaseUnit` lifecycle management (start, reconnect, shutdown per database)
 - `rules/` — `RuleEngine` (RegexSet fast path), validators (Luhn, SSN), builtin rules, masking
 - `events.rs` — `ScanEvent` extraction from etl events, `is_scannable_type()` column-type filtering
-- `scanner.rs` — `Scanner::scan(event)` runs rules against scan events; skips non-text column types
+- `scanner.rs` — `Scanner::scan(event)` runs rules against scan events
 - `watcher.rs` — file watcher for hot-reloading rules via `notify`
 - `alerts/` — enum dispatch (`Log`/`Stdout`/`Jsonl`/`Webhook`/`Slack`/`Postgres`), deduplication, dispatcher
 - `commands/` — CLI: `rules`, `scan`
-- `metrics.rs` / `server.rs` — Prometheus metrics (14 counters/gauges/histograms), axum health endpoints
+- `config.rs` — top-level `Config`, TOML/env loading, password file resolution
+- `args.rs` — CLI argument parsing + `route()` dispatch
+- `logging.rs` — tracing subscriber setup, file logging, JSON/text format
+- `pattern.rs` — glob pattern matching for scan filter includes/excludes
+- `rules/detectors/` — builtin detectors: credit card, SSN, phone, email, IBAN
+- `metrics.rs` / `server.rs` — Prometheus metrics (counters/gauges/histograms), axum health endpoints
 
 ## Conventions
 
@@ -44,7 +54,7 @@ Key modules:
 - Rust edition 2024, rustfmt max_width=160, imports_granularity=Crate
 - Structs with `Default` impl use `#[serde(default)]` at struct level, not per-field functions
 - `anyhow::Result` for error handling throughout
-- Config: TOML-based with env override (`APP__*`). Example in `config/config.toml`
+- Config: TOML-based with env override (`PGSENSE__*`). Example in `config/config.toml`
 - etl dependency pinned to git rev `4f1141e` — requires PostgreSQL 16+
 
 ## Testing
@@ -53,6 +63,7 @@ Key modules:
 - Integration tests in `tests/` — CLI tests via `assert_cmd`, pipeline tests via `testcontainers`
 - Pipeline tests need Docker (Colima: `DOCKER_HOST=unix:///Users/ehbr/.colima/default/docker.sock`)
 - Benchmarks in `benches/` (criterion): `detection_bench.rs`, `builtin_detectors_bench.rs`, `validators_bench.rs`
+- Fuzz targets in `fuzz/` (AFL): credit_cards, ssns, phones, emails, ibans
 
 ## Dependencies to Know
 
