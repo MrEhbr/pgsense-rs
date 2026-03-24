@@ -59,7 +59,6 @@ impl PipelineInner {
 pub struct PipelineRunner {
     pipeline: Option<PipelineInner>,
     table_registry: TableRegistry,
-    // Stored for reconnection
     pipeline_id: u64,
     database: String,
     scan_filter: ScanFilter,
@@ -70,6 +69,7 @@ pub struct PipelineRunner {
 }
 
 impl PipelineRunner {
+    #[tracing::instrument(skip_all, fields(pipeline_id))]
     pub async fn new(
         pipeline_id: u64,
         db: &crate::pipeline::config::DatabaseConfig,
@@ -81,7 +81,6 @@ impl PipelineRunner {
 
         if !scan_filter.include_schemas.is_empty() || !scan_filter.exclude_tables.is_empty() || !scan_filter.exclude_columns.is_empty() {
             info!(
-                database = %database,
                 include_schemas = ?scan_filter.include_schemas,
                 exclude_tables = ?scan_filter.exclude_tables,
                 exclude_columns = ?scan_filter.exclude_columns,
@@ -147,6 +146,7 @@ impl PipelineRunner {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn start(&mut self) -> Result<()> {
         let pipeline = self
             .pipeline

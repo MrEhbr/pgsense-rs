@@ -6,6 +6,8 @@ use tracing::{Level, level_filters::LevelFilter};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
+use crate::config::TelemetryConfig;
+
 fn serialize_level<S>(level: &Option<Level>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -64,9 +66,26 @@ impl Default for LogConfig {
     }
 }
 
-/// Returns a WorkerGuard that must be held until program exit to ensure log
-/// flush.
-pub fn setup(config: &LogConfig) -> Result<WorkerGuard> {
+/// Holds guards that must be kept alive until program exit.
+/// Dropping this flushes logs and shuts down the OTel provider.
+pub struct LoggingGuards {
+    _worker_guard: WorkerGuard,
+    #[cfg(feature = "otel")]
+    _otel_provider: Option<opentelemetry_sdk::trace::SdkTracerProvider>,
+}
+
+impl Drop for LoggingGuards {
+    fn drop(&mut self) {
+        #[cfg(feature = "otel")]
+        if let Some(provider) = self._otel_provider.take() {
+            let _ = provider.shutdown();
+        }
+    }
+}
+
+/// Initialize the tracing subscriber with fmt layer and optional OTel layer.
+/// The returned `LoggingGuards` must be held until program exit.
+pub fn setup(config: &LogConfig, telemetry: &TelemetryConfig) -> Result<LoggingGuards> {
     let level_filter: LevelFilter = config.level.into();
 
     let env_filter = EnvFilter::builder()
@@ -122,7 +141,26 @@ pub fn setup(config: &LogConfig) -> Result<WorkerGuard> {
     }
     .with_filter(env_filter);
 
+    #[cfg(feature = "otel")]
+    let otel_provider;
+
+    #[cfg(feature = "otel")]
+    let otel_layer = if telemetry.enabled {
+        let (provider, tracer) = crate::telemetry::init_tracer(telemetry).context("failed to initialize OpenTelemetry tracer")?;
+        otel_provider = Some(provider);
+        Some(tracing_opentelemetry::OpenTelemetryLayer::new(tracer))
+    } else {
+        otel_provider = None;
+        None
+    };
+
+    #[cfg(not(feature = "otel"))]
+    let _ = telemetry;
+
     let registry = tracing_subscriber::registry().with(fmt_layer);
+
+    #[cfg(feature = "otel")]
+    let registry = registry.with(otel_layer);
 
     #[cfg(feature = "tokio-console")]
     let registry = registry.with(console_subscriber::spawn());
@@ -131,5 +169,9 @@ pub fn setup(config: &LogConfig) -> Result<WorkerGuard> {
         .try_init()
         .context("Failed to initialize logging")?;
 
-    Ok(guard)
+    Ok(LoggingGuards {
+        _worker_guard: guard,
+        #[cfg(feature = "otel")]
+        _otel_provider: otel_provider,
+    })
 }

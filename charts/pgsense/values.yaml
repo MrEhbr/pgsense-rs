@@ -139,6 +139,13 @@ alerts:
   #     trustedRootCerts: ""
   postgres: {}
 
+telemetry:
+  enabled: false
+  endpoint: "http://localhost:4317"
+  protocol: grpc
+  serviceName: pgsense
+  sampleRate: 1.0
+
 server:
   enabled: true
   port: 9090

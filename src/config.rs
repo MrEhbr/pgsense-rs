@@ -16,6 +16,36 @@ use crate::{
     scanner::ScanFilter,
 };
 
+#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum OtlpProtocol {
+    #[default]
+    Grpc,
+    Http,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct TelemetryConfig {
+    pub enabled: bool,
+    pub endpoint: String,
+    pub protocol: OtlpProtocol,
+    pub service_name: String,
+    pub sample_rate: f64,
+}
+
+impl Default for TelemetryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: "http://localhost:4317".to_string(),
+            protocol: OtlpProtocol::Grpc,
+            service_name: "pgsense".to_string(),
+            sample_rate: 1.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct ServerConfig {
@@ -33,6 +63,7 @@ impl Default for ServerConfig {
 #[serde(default)]
 pub struct Config {
     pub log: LogConfig,
+    pub telemetry: TelemetryConfig,
     pub databases: Vec<DatabaseConfig>,
     pub pipeline: PipelineSettings,
     pub rules_file: Option<PathBuf>,

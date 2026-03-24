@@ -9,7 +9,7 @@ use std::{
 use anyhow::{Context, Result, bail};
 use arc_swap::ArcSwap;
 use tokio::sync::{mpsc, watch};
-use tracing::{info, warn};
+use tracing::{Instrument, info, info_span, warn};
 
 use super::{ExitSignal, PipelineStatus};
 use crate::{
@@ -55,6 +55,7 @@ impl DatabaseUnit {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(database = %self.database_id))]
     pub async fn start(&mut self, pipeline_settings: &PipelineSettings, exit_tx: mpsc::Sender<ExitSignal>) -> Result<()> {
         if self.shutdown_tx.is_some() {
             bail!("unit for {} is already running", self.database_id);
@@ -151,37 +152,59 @@ impl DatabaseUnit {
         while let Some(events) = event_rx.recv().await {
             let scanner = scanner.load();
             let batch_db = events.first().map(|e| e.database.as_str()).unwrap_or("");
+            let batch_size = events.len();
 
-            for event in &events {
-                let start = std::time::Instant::now();
-                metrics::EVENTS_TOTAL
-                    .with_label_values(&[&event.database])
-                    .inc();
+            let batch_span = info_span!("scan_batch", database = batch_db, batch_size);
 
-                let findings = scanner.scan(event);
-                for finding in &findings {
-                    metrics::FINDINGS_TOTAL
-                        .with_label_values(&[&finding.database, &finding.category, &finding.severity.to_string()])
-                        .inc();
-                }
-
-                metrics::SCAN_DURATION
-                    .with_label_values(&[&event.database])
-                    .observe(start.elapsed().as_secs_f64());
-
-                if !findings.is_empty() {
-                    let dispatch_start = std::time::Instant::now();
-                    for finding in &findings {
-                        dispatcher.dispatch(finding).await;
-                    }
-                    metrics::DISPATCH_DURATION
+            async {
+                for event in &events {
+                    let start = std::time::Instant::now();
+                    metrics::EVENTS_TOTAL
                         .with_label_values(&[&event.database])
-                        .observe(dispatch_start.elapsed().as_secs_f64());
+                        .inc();
+
+                    let findings_count;
+                    let event_span = info_span!(
+                        "scan_event",
+                        schema = %event.schema_name,
+                        table = %event.table_name,
+                        findings_count = tracing::field::Empty,
+                    );
+
+                    let findings = {
+                        let _enter = event_span.enter();
+                        let findings = scanner.scan(event);
+                        findings_count = findings.len();
+                        event_span.record("findings_count", findings_count);
+                        findings
+                    };
+
+                    for finding in &findings {
+                        metrics::FINDINGS_TOTAL
+                            .with_label_values(&[&finding.database, &finding.category, &finding.severity.to_string()])
+                            .inc();
+                    }
+
+                    metrics::SCAN_DURATION
+                        .with_label_values(&[&event.database])
+                        .observe(start.elapsed().as_secs_f64());
+
+                    if !findings.is_empty() {
+                        let dispatch_start = std::time::Instant::now();
+                        for finding in &findings {
+                            dispatcher.dispatch(finding).await;
+                        }
+                        metrics::DISPATCH_DURATION
+                            .with_label_values(&[&event.database])
+                            .observe(dispatch_start.elapsed().as_secs_f64());
+                    }
                 }
+                metrics::BATCH_SIZE
+                    .with_label_values(&[batch_db])
+                    .observe(batch_size as f64);
             }
-            metrics::BATCH_SIZE
-                .with_label_values(&[batch_db])
-                .observe(events.len() as f64);
+            .instrument(batch_span)
+            .await;
         }
     }
 }

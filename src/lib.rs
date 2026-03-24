@@ -12,4 +12,6 @@ pub mod pipeline;
 pub mod rules;
 pub mod scanner;
 pub mod server;
+#[cfg(feature = "otel")]
+pub mod telemetry;
 pub mod watcher;

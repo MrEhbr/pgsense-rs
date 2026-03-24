@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use tracing::{debug, error, info, warn};
+use tracing::{Instrument, debug, error, info, info_span, warn};
 
 use super::{
     AlertChannel, config::AlertsConfig, dedup::Deduplicator, jsonl::JsonlChannel, log::LogChannel, postgres::PostgresChannel, slack::SlackChannel,
@@ -103,47 +103,66 @@ impl Dispatcher {
     /// specifies `channels`, only the named channels are called; `None`
     /// fans out to all channels (backward compatible).
     pub async fn dispatch(&self, finding: &Finding) {
-        if !self.dedup.should_alert(finding) {
-            metrics::DEDUP_TOTAL
-                .with_label_values(&[&finding.database, "suppressed"])
-                .inc();
-            debug!(
-                rule_id = %finding.rule_id,
-                table = %finding.table_name,
-                column = %finding.column_name,
-                "alert deduplicated"
-            );
-            return;
-        }
-        metrics::DEDUP_TOTAL
-            .with_label_values(&[&finding.database, "passed"])
-            .inc();
+        let dispatch_span = info_span!(
+            "dispatch_alert",
+            rule_id = %finding.rule_id,
+            severity = %finding.severity,
+            deduplicated = tracing::field::Empty,
+        );
 
-        for nc in &self.channels {
-            if let Some(ref allowed) = finding.channels
-                && !allowed.iter().any(|a| a == &nc.name)
-            {
-                continue;
+        async {
+            if !self.dedup.should_alert(finding) {
+                tracing::Span::current().record("deduplicated", true);
+                metrics::DEDUP_TOTAL
+                    .with_label_values(&[&finding.database, "suppressed"])
+                    .inc();
+                debug!(
+                    table = %finding.table_name,
+                    column = %finding.column_name,
+                    "alert deduplicated"
+                );
+                return;
             }
-            match nc.channel.send(finding).await {
-                Ok(()) => {
-                    metrics::ALERTS_TOTAL
-                        .with_label_values(&[&nc.name, "ok"])
-                        .inc();
-                },
-                Err(e) => {
-                    metrics::ALERTS_TOTAL
-                        .with_label_values(&[&nc.name, "error"])
-                        .inc();
-                    error!(
-                        channel = %nc.name,
-                        error = %e,
-                        rule_id = %finding.rule_id,
-                        "alert channel failed"
-                    );
-                },
+            tracing::Span::current().record("deduplicated", false);
+            metrics::DEDUP_TOTAL
+                .with_label_values(&[&finding.database, "passed"])
+                .inc();
+
+            for nc in &self.channels {
+                if let Some(ref allowed) = finding.channels
+                    && !allowed.iter().any(|a| a == &nc.name)
+                {
+                    continue;
+                }
+
+                let send_span = info_span!("alert_channel_send", channel = %nc.name, status = tracing::field::Empty);
+
+                async {
+                    match nc.channel.send(finding).await {
+                        Ok(()) => {
+                            tracing::Span::current().record("status", "ok");
+                            metrics::ALERTS_TOTAL
+                                .with_label_values(&[&nc.name, "ok"])
+                                .inc();
+                        },
+                        Err(e) => {
+                            tracing::Span::current().record("status", "error");
+                            metrics::ALERTS_TOTAL
+                                .with_label_values(&[&nc.name, "error"])
+                                .inc();
+                            error!(
+                                error = %e,
+                                "alert channel failed"
+                            );
+                        },
+                    }
+                }
+                .instrument(send_span)
+                .await;
             }
         }
+        .instrument(dispatch_span)
+        .await;
     }
 
     pub async fn flush(&self) {

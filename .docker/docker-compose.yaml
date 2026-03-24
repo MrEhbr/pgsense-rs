@@ -25,7 +25,7 @@ services:
       retries: 10
 
   pgsense:
-    image: ghcr.io/mrehbr/pgsense-rs:latest
+    image: ghcr.io/mrehbr/pgsense-rs:latest-arm64
     profiles: [pgsense]
     command: ["scan", "-c", "/opt/pgsense/config.toml", "-r", "/opt/pgsense/rules.toml"]
     volumes:
@@ -95,7 +95,20 @@ services:
     depends_on:
       - prometheus
 
+  victoria-traces:
+    image: victoriametrics/victoria-traces:latest
+    profiles: [bench]
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "10428:10428" # HTTP API + UI
+    command:
+      - -otlpGRPCListenAddr=:4317
+      - -otlpGRPC.tls=false
+    volumes:
+      - vtdata:/victoria-traces-data
+
 volumes:
   pgdata:
   promdata:
   grafanadata:
+  vtdata:

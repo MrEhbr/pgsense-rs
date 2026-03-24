@@ -169,6 +169,13 @@ data:
     {{- end }}
     {{- end }}
 
+    [telemetry]
+    enabled = {{ .Values.telemetry.enabled }}
+    endpoint = {{ .Values.telemetry.endpoint | quote }}
+    protocol = {{ .Values.telemetry.protocol | quote }}
+    service_name = {{ .Values.telemetry.serviceName | quote }}
+    sample_rate = {{ .Values.telemetry.sampleRate }}
+
     [server]
     enabled = {{ .Values.server.enabled }}
     port = {{ .Values.server.port }}

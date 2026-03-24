@@ -39,7 +39,7 @@ pub struct Args {
 pub async fn run(args: Args) -> Result<()> {
     let config = Config::load(args.config.as_deref()).context("failed to load configuration")?;
     let config = apply_overrides(&args, config);
-    let _guard = crate::logging::setup(&config.log).context("failed to initialize logging")?;
+    let _guard = crate::logging::setup(&config.log, &config.telemetry).context("failed to initialize logging")?;
 
     metrics::init();
     let ready = Arc::new(AtomicBool::new(false));
@@ -131,6 +131,7 @@ pub async fn run(args: Args) -> Result<()> {
     Ok(())
 }
 
+#[tracing::instrument(skip_all, fields(path = %rules_path.display()))]
 fn build_scanner(rules_path: &Path) -> Result<(Scanner, Vec<RuleConfig>)> {
     let rules = crate::config::load_rules(rules_path).context("failed to load rules")?;
     let start = std::time::Instant::now();
@@ -151,7 +152,6 @@ fn build_scanner(rules_path: &Path) -> Result<(Scanner, Vec<RuleConfig>)> {
         builtin,
         script,
         compile_ms = elapsed.as_millis(),
-        path = %rules_path.display(),
         "detection engine ready"
     );
     Ok((scanner, rules))

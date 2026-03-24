@@ -66,6 +66,7 @@ impl Supervisor {
         (supervisor, exit_rx)
     }
 
+    #[tracing::instrument(skip_all, fields(databases = self.units.len()))]
     pub async fn start(&mut self) -> Result<()> {
         for unit in self.units.values_mut() {
             unit.start(&self.pipeline_settings, self.exit_tx.clone())
