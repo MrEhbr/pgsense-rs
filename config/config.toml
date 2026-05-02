@@ -129,3 +129,8 @@ password = "postgres"
 # [server]
 # enabled = false                # set true to expose /health, /ready, /metrics
 # port = 9090
+
+# --- Rule profiling (per-rule + per-phase scan timing) ---
+
+# [profiling]
+# enabled = false                # set true to record pgsense_rule_scan_duration_seconds + pgsense_phase_scan_duration_seconds

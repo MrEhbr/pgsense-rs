@@ -152,6 +152,8 @@ When `server.enabled = true`, an HTTP server exposes:
 | `pgsense_dedup_total` | counter | database, outcome | Deduplication decisions |
 | `pgsense_config_reloads_total` | counter | status | Configuration reload attempts |
 | `pgsense_script_errors_total` | counter | rule_id | Rhai script execution errors |
+| `pgsense_rule_scan_duration_seconds` | histogram | rule_id | Per-rule scan latency (only when `profiling.enabled = true`) |
+| `pgsense_phase_scan_duration_seconds` | histogram | phase | Per-phase scan latency: regex/builtin/script (only when `profiling.enabled = true`) |
 | `process_*` | mixed | — | CPU, memory, open FDs, start time (Linux only) |
 
 ## Development

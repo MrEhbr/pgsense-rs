@@ -1,6 +1,7 @@
-use std::{borrow::Cow, collections::HashSet};
+use std::{borrow::Cow, collections::HashSet, time::Instant};
 
 use anyhow::{Context, Result};
+use prometheus::HistogramVec;
 use regex::{Regex, RegexSet};
 use tracing::{debug, warn};
 
@@ -76,10 +77,24 @@ pub struct RuleEngine {
     builtin_indices: Vec<usize>,
     script_indices: Vec<usize>,
     script_engine: rhai::Engine,
+    profiling_enabled: bool,
+}
+
+#[inline(always)]
+fn mark<const P: bool>() -> Option<Instant> {
+    if P { Some(Instant::now()) } else { None }
+}
+
+#[inline(always)]
+fn record<const P: bool>(start: Option<Instant>, hist: &HistogramVec, label: &str) {
+    if P {
+        hist.with_label_values(&[label])
+            .observe(start.unwrap().elapsed().as_secs_f64());
+    }
 }
 
 impl RuleEngine {
-    pub fn new(configs: &[RuleConfig]) -> Result<Self> {
+    pub fn new(configs: &[RuleConfig], profiling_enabled: bool) -> Result<Self> {
         let script_engine = script::create_script_engine();
         let mut rules = Vec::with_capacity(configs.len());
         let mut regex_patterns: Vec<String> = Vec::new();
@@ -154,16 +169,29 @@ impl RuleEngine {
             builtin_indices,
             script_indices,
             script_engine,
+            profiling_enabled,
         })
     }
 
     pub fn scan_value<'a>(&'a self, value: &'a str) -> Vec<RuleMatch<'a>> {
+        if self.profiling_enabled {
+            self.scan_inner::<true>(value)
+        } else {
+            self.scan_inner::<false>(value)
+        }
+    }
+
+    // Monomorphized: `P = false` const-folds every `if P` and `mark`/`record`
+    // call to nothing, leaving an instrumentation-free scan body.
+    fn scan_inner<'a, const P: bool>(&'a self, value: &'a str) -> Vec<RuleMatch<'a>> {
         let mut results = Vec::new();
 
         // Phase 1: RegexSet fast-path
+        let phase_start = mark::<P>();
         for set_idx in self.regex_set.matches(value).into_iter() {
             let rule_idx = self.regex_indices[set_idx];
             let rule = &self.rules[rule_idx];
+            let rule_start = mark::<P>();
             if let RuleKind::Regex { ref regex, ref validator } = rule.kind
                 && let Some(mat) = regex.find(value)
             {
@@ -175,11 +203,13 @@ impl RuleEngine {
                         Validator::Ssn => validators::ssn(matched_text),
                     };
                     if !valid {
+                        record::<P>(rule_start, &metrics::RULE_SCAN_DURATION, &rule.meta.id);
                         continue;
                     }
                 }
 
                 if rule.is_allowed(matched_text) {
+                    record::<P>(rule_start, &metrics::RULE_SCAN_DURATION, &rule.meta.id);
                     continue;
                 }
 
@@ -188,12 +218,16 @@ impl RuleEngine {
                     matched_text: Cow::Borrowed(matched_text),
                 });
             }
+            record::<P>(rule_start, &metrics::RULE_SCAN_DURATION, &rule.meta.id);
         }
+        record::<P>(phase_start, &metrics::PHASE_SCAN_DURATION, "regex");
 
         // Phase 2: Builtin detectors
+        let phase_start = mark::<P>();
         for &rule_idx in &self.builtin_indices {
             let rule = &self.rules[rule_idx];
             let RuleKind::Builtin(ref detector) = rule.kind else { continue };
+            let rule_start = mark::<P>();
             for matched_text in detector.scan(value) {
                 if rule.is_allowed(&matched_text) {
                     continue;
@@ -203,12 +237,16 @@ impl RuleEngine {
                     matched_text: Cow::Owned(matched_text),
                 });
             }
+            record::<P>(rule_start, &metrics::RULE_SCAN_DURATION, &rule.meta.id);
         }
+        record::<P>(phase_start, &metrics::PHASE_SCAN_DURATION, "builtin");
 
         // Phase 3: Script rules
+        let phase_start = mark::<P>();
         for &rule_idx in &self.script_indices {
             let rule = &self.rules[rule_idx];
             let RuleKind::Script { ref ast } = rule.kind else { continue };
+            let rule_start = mark::<P>();
             match script::run_detect(&self.script_engine, ast, value) {
                 Ok(matches) => {
                     for matched_text in matches {
@@ -228,7 +266,9 @@ impl RuleEngine {
                     warn!(rule_id = %rule.meta.id, error = %e, "script rule execution failed");
                 },
             }
+            record::<P>(rule_start, &metrics::RULE_SCAN_DURATION, &rule.meta.id);
         }
+        record::<P>(phase_start, &metrics::PHASE_SCAN_DURATION, "script");
 
         results
     }
@@ -280,7 +320,7 @@ mod tests {
 
     #[test]
     fn empty_config_compiles_to_empty_engine() {
-        let engine = RuleEngine::new(&[]).unwrap();
+        let engine = RuleEngine::new(&[], false).unwrap();
         assert_eq!(engine.rule_count(), 0);
         assert!(engine.scan_value("anything").is_empty());
     }
@@ -288,25 +328,31 @@ mod tests {
     #[test]
     fn invalid_regex_rejected_at_compile() {
         assert!(
-            RuleEngine::new(&[RuleConfig {
-                pattern: Some("[invalid".into()),
-                ..cfg("bad")
-            }])
+            RuleEngine::new(
+                &[RuleConfig {
+                    pattern: Some("[invalid".into()),
+                    ..cfg("bad")
+                }],
+                false,
+            )
             .is_err()
         );
     }
 
     #[test]
     fn scope_table_in_both_include_and_exclude_rejected() {
-        let err = RuleEngine::new(&[RuleConfig {
-            pattern: Some(r"\bfoo\b".into()),
-            scope: Some(RuleScope {
-                include_tables: pm(&["users"]),
-                exclude_tables: pm(&["users"]),
-                ..Default::default()
-            }),
-            ..cfg("bad-scope")
-        }])
+        let err = RuleEngine::new(
+            &[RuleConfig {
+                pattern: Some(r"\bfoo\b".into()),
+                scope: Some(RuleScope {
+                    include_tables: pm(&["users"]),
+                    exclude_tables: pm(&["users"]),
+                    ..Default::default()
+                }),
+                ..cfg("bad-scope")
+            }],
+            false,
+        )
         .err()
         .expect("should reject conflicting scope");
         let msg = err.to_string();
@@ -316,15 +362,18 @@ mod tests {
 
     #[test]
     fn scope_column_in_both_include_and_exclude_rejected() {
-        let err = RuleEngine::new(&[RuleConfig {
-            pattern: Some(r"\bfoo\b".into()),
-            scope: Some(RuleScope {
-                include_columns: pm(&["email"]),
-                exclude_columns: pm(&["email"]),
-                ..Default::default()
-            }),
-            ..cfg("bad-scope")
-        }])
+        let err = RuleEngine::new(
+            &[RuleConfig {
+                pattern: Some(r"\bfoo\b".into()),
+                scope: Some(RuleScope {
+                    include_columns: pm(&["email"]),
+                    exclude_columns: pm(&["email"]),
+                    ..Default::default()
+                }),
+                ..cfg("bad-scope")
+            }],
+            false,
+        )
         .err()
         .expect("should reject conflicting scope");
         let msg = err.to_string();
@@ -355,7 +404,7 @@ mod tests {
                 ..cfg("r2")
             }, // rules[3] → set[1]
         ];
-        let engine = RuleEngine::new(&configs).unwrap();
+        let engine = RuleEngine::new(&configs, false).unwrap();
 
         let m = engine.scan_value("aaa");
         assert_eq!(m.len(), 1);
@@ -385,7 +434,7 @@ mod tests {
                 ..cfg("s1")
             },
         ];
-        let engine = RuleEngine::new(&configs).unwrap();
+        let engine = RuleEngine::new(&configs, false).unwrap();
 
         let m = engine.scan_value("foo 4111111111111111 KEYWORD");
         assert_eq!(m.len(), 3);
@@ -404,16 +453,19 @@ mod tests {
             validate: Some(Validator::Luhn),
             ..cfg("cc")
         }];
-        let engine = RuleEngine::new(&configs).unwrap();
+        let engine = RuleEngine::new(&configs, false).unwrap();
         assert_eq!(engine.scan_value(input).len(), expected);
     }
 
     #[test]
     fn matched_text_is_the_match_not_full_input() {
-        let engine = RuleEngine::new(&[RuleConfig {
-            pattern: Some(r"\b\d{3}\b".into()),
-            ..cfg("r1")
-        }])
+        let engine = RuleEngine::new(
+            &[RuleConfig {
+                pattern: Some(r"\b\d{3}\b".into()),
+                ..cfg("r1")
+            }],
+            false,
+        )
         .unwrap();
         let m = engine.scan_value("abc 123 def");
         assert_eq!(m[0].matched_text, "123");
@@ -431,7 +483,7 @@ mod tests {
             allowlist,
             ..cfg("email")
         }];
-        let engine = RuleEngine::new(&configs).unwrap();
+        let engine = RuleEngine::new(&configs, false).unwrap();
         assert_eq!(engine.scan_value(input).len(), expected);
     }
 
@@ -449,7 +501,7 @@ mod tests {
             }),
             ..cfg("cc")
         }];
-        let engine = RuleEngine::new(&configs).unwrap();
+        let engine = RuleEngine::new(&configs, false).unwrap();
         assert_eq!(engine.scan_value(input).len(), expected);
     }
 
@@ -460,7 +512,7 @@ mod tests {
             builtin: Some(BuiltinKind::Email),
             ..cfg("email")
         }];
-        let engine = RuleEngine::new(&configs).unwrap();
+        let engine = RuleEngine::new(&configs, false).unwrap();
 
         let m = engine.scan_value("contact alice@example.com now");
         assert_eq!(m.len(), 1);
@@ -477,7 +529,7 @@ mod tests {
             builtin: Some(BuiltinKind::Phone),
             ..cfg("phone")
         }];
-        let engine = RuleEngine::new(&configs).unwrap();
+        let engine = RuleEngine::new(&configs, false).unwrap();
 
         let m = engine.scan_value("call +44 20 7946 0958 now");
         assert_eq!(m.len(), 1);

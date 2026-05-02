@@ -24,7 +24,7 @@ async fn test_dispatcher() -> Arc<Dispatcher> {
 }
 
 fn empty_scanner() -> Arc<ArcSwap<Scanner>> {
-    Arc::new(ArcSwap::from_pointee(Scanner::new(RuleEngine::new(&[]).unwrap())))
+    Arc::new(ArcSwap::from_pointee(Scanner::new(RuleEngine::new(&[], false).unwrap())))
 }
 
 #[cfg_attr(not(docker), ignore = "Docker daemon not available")]

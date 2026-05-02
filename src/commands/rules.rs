@@ -65,7 +65,7 @@ fn list_rules(rules: &[crate::rules::config::RuleConfig]) -> Result<()> {
 }
 
 fn test_value(rules: &[crate::rules::config::RuleConfig], input: &str) -> Result<()> {
-    let engine = RuleEngine::new(rules).context("failed to compile detection rules")?;
+    let engine = RuleEngine::new(rules, false).context("failed to compile detection rules")?;
     let matches = engine.scan_value(input);
 
     if matches.is_empty() {

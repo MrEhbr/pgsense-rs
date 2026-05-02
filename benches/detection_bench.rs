@@ -117,28 +117,28 @@ fn wide_event() -> ScanEvent {
 }
 
 fn bench_event_no_match(c: &mut Criterion) {
-    let engine = RuleEngine::new(&noop_rule()).unwrap();
+    let engine = RuleEngine::new(&noop_rule(), false).unwrap();
     let scanner = Scanner::new(engine);
     let ev = event(false);
     c.bench_function("scan/event_no_match", |b| b.iter(|| scanner.scan(black_box(&ev))));
 }
 
 fn bench_event_with_match(c: &mut Criterion) {
-    let engine = RuleEngine::new(&noop_rule()).unwrap();
+    let engine = RuleEngine::new(&noop_rule(), false).unwrap();
     let scanner = Scanner::new(engine);
     let ev = event(true);
     c.bench_function("scan/event_with_match", |b| b.iter(|| scanner.scan(black_box(&ev))));
 }
 
 fn bench_type_filtering(c: &mut Criterion) {
-    let engine = RuleEngine::new(&noop_rule()).unwrap();
+    let engine = RuleEngine::new(&noop_rule(), false).unwrap();
     let scanner = Scanner::new(engine);
     let ev = wide_event();
     c.bench_function("scan/type_filtering", |b| b.iter(|| scanner.scan(black_box(&ev))));
 }
 
 fn bench_value_sizes(c: &mut Criterion) {
-    let engine = RuleEngine::new(&noop_rule()).unwrap();
+    let engine = RuleEngine::new(&noop_rule(), false).unwrap();
     let scanner = Scanner::new(engine);
     let mut group = c.benchmark_group("scan/value_size");
 
@@ -162,7 +162,7 @@ fn bench_value_sizes(c: &mut Criterion) {
 }
 
 fn bench_throughput(c: &mut Criterion) {
-    let engine = RuleEngine::new(&noop_rule()).unwrap();
+    let engine = RuleEngine::new(&noop_rule(), false).unwrap();
     let scanner = Scanner::new(engine);
     let clean = event(false);
     let hit = event(true);
@@ -181,6 +181,17 @@ fn bench_throughput(c: &mut Criterion) {
             total
         });
     });
+}
+
+fn bench_profiling_overhead(c: &mut Criterion) {
+    let off = Scanner::new(RuleEngine::new(&noop_rule(), false).unwrap());
+    let on = Scanner::new(RuleEngine::new(&noop_rule(), true).unwrap());
+    let ev = event(true);
+
+    let mut group = c.benchmark_group("scan/profiling_overhead");
+    group.bench_function("off", |b| b.iter(|| off.scan(black_box(&ev))));
+    group.bench_function("on", |b| b.iter(|| on.scan(black_box(&ev))));
+    group.finish();
 }
 
 fn bench_event_extraction(c: &mut Criterion) {
@@ -266,6 +277,7 @@ criterion_group!(
     bench_type_filtering,
     bench_value_sizes,
     bench_throughput,
+    bench_profiling_overhead,
     bench_event_extraction,
 );
 criterion_main!(benches);

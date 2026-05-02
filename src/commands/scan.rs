@@ -41,7 +41,10 @@ pub async fn run(args: Args) -> Result<()> {
     let config = apply_overrides(&args, config);
     let _guard = crate::logging::setup(&config.log, &config.telemetry).context("failed to initialize logging")?;
 
-    metrics::init();
+    metrics::init(config.profiling.enabled);
+    if config.profiling.enabled {
+        info!("rule profiling enabled — recording per-rule and per-phase scan durations");
+    }
     let ready = Arc::new(AtomicBool::new(false));
 
     if config.server.enabled {
@@ -59,7 +62,7 @@ pub async fn run(args: Args) -> Result<()> {
         .as_deref()
         .or(config.rules_file.as_deref())
         .context("no rules file specified — use --rules <FILE> or set rules_file in config")?;
-    let (scanner, rules) = build_scanner(rules_path)?;
+    let (scanner, rules) = build_scanner(rules_path, config.profiling.enabled)?;
     metrics::RULES_LOADED.set(scanner.rule_count() as i64);
     let scanner = Arc::new(ArcSwap::from_pointee(scanner));
 
@@ -103,7 +106,7 @@ pub async fn run(args: Args) -> Result<()> {
             _ = rules_rx.recv() => {
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                 while rules_rx.try_recv().is_ok() {}
-                match build_scanner(&rules_path) {
+                match build_scanner(&rules_path, config.profiling.enabled) {
                     Ok((new_scanner, new_rules)) => {
                         dispatcher.validate_channel_routing(&new_rules);
                         metrics::RULES_LOADED.set(new_scanner.rule_count() as i64);
@@ -132,10 +135,10 @@ pub async fn run(args: Args) -> Result<()> {
 }
 
 #[tracing::instrument(skip_all, fields(path = %rules_path.display()))]
-fn build_scanner(rules_path: &Path) -> Result<(Scanner, Vec<RuleConfig>)> {
+fn build_scanner(rules_path: &Path, profiling_enabled: bool) -> Result<(Scanner, Vec<RuleConfig>)> {
     let rules = crate::config::load_rules(rules_path).context("failed to load rules")?;
     let start = std::time::Instant::now();
-    let engine = RuleEngine::new(&rules).context("failed to compile detection rules")?;
+    let engine = RuleEngine::new(&rules, profiling_enabled).context("failed to compile detection rules")?;
     let elapsed = start.elapsed();
     let scanner = Scanner::new(engine);
 

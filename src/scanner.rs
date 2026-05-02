@@ -185,7 +185,7 @@ mod tests {
             scope: None,
             channels: None,
         }];
-        let engine = RuleEngine::new(&rules).unwrap();
+        let engine = RuleEngine::new(&rules, false).unwrap();
         Scanner::new(engine)
     }
 
@@ -292,7 +292,7 @@ mod tests {
             scope: Some(scope),
             channels: None,
         }];
-        let engine = RuleEngine::new(&rules).unwrap();
+        let engine = RuleEngine::new(&rules, false).unwrap();
         Scanner::new(engine)
     }
 

@@ -95,8 +95,30 @@ pub static DISPATCH_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
     )
     .unwrap()
 });
+pub static RULE_SCAN_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
+    register_histogram_vec!(
+        HistogramOpts::new(
+            "pgsense_rule_scan_duration_seconds",
+            "Time spent evaluating a single rule against a value"
+        )
+        .buckets(vec![0.000001, 0.000005, 0.00001, 0.00005, 0.0001, 0.0005, 0.001, 0.005, 0.01]),
+        &["rule_id"]
+    )
+    .unwrap()
+});
+pub static PHASE_SCAN_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
+    register_histogram_vec!(
+        HistogramOpts::new(
+            "pgsense_phase_scan_duration_seconds",
+            "Time spent in a single scan phase (regex/builtin/script)"
+        )
+        .buckets(vec![0.000001, 0.00001, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05]),
+        &["phase"]
+    )
+    .unwrap()
+});
 
-pub fn init() {
+pub fn init(profiling: bool) {
     // Force initialization of all metrics so they appear in /metrics before first
     // use
     let _ = &*EVENTS_TOTAL;
@@ -113,6 +135,11 @@ pub fn init() {
     let _ = &*SCAN_DURATION;
     let _ = &*BATCH_SIZE;
     let _ = &*DISPATCH_DURATION;
+
+    if profiling {
+        let _ = &*RULE_SCAN_DURATION;
+        let _ = &*PHASE_SCAN_DURATION;
+    }
 
     #[cfg(target_os = "linux")]
     {
@@ -135,7 +162,7 @@ mod tests {
 
     #[test]
     fn metrics_record_and_render() {
-        init();
+        init(false);
 
         EVENTS_TOTAL.with_label_values(&["localhost/test"]).inc();
         FINDINGS_TOTAL

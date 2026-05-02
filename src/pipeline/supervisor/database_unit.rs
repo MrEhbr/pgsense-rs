@@ -215,7 +215,7 @@ mod tests {
 
     fn make_unit() -> DatabaseUnit {
         let scanner = Arc::new(ArcSwap::from_pointee(Scanner::new(
-            crate::rules::engine::RuleEngine::new(&[]).unwrap(),
+            crate::rules::engine::RuleEngine::new(&[], false).unwrap(),
         )));
         let dispatcher = Arc::new(Dispatcher::default_for_test());
         DatabaseUnit::new(DatabaseConfig::default(), scanner, dispatcher)

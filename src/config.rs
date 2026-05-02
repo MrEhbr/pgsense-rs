@@ -62,6 +62,12 @@ impl Default for ServerConfig {
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[serde(default)]
+pub struct ProfilingConfig {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(default)]
 pub struct Config {
     pub log: LogConfig,
     pub telemetry: TelemetryConfig,
@@ -71,6 +77,7 @@ pub struct Config {
     pub scan: ScanFilter,
     pub alerts: AlertsConfig,
     pub server: ServerConfig,
+    pub profiling: ProfilingConfig,
 }
 
 impl Config {

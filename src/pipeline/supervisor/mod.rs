@@ -98,7 +98,7 @@ mod tests {
 
     fn make_supervisor() -> (Supervisor, mpsc::Receiver<ExitSignal>) {
         let scanner = Arc::new(ArcSwap::from_pointee(Scanner::new(
-            crate::rules::engine::RuleEngine::new(&[]).unwrap(),
+            crate::rules::engine::RuleEngine::new(&[], false).unwrap(),
         )));
         let dispatcher = Arc::new(Dispatcher::default_for_test());
         let databases = vec![
