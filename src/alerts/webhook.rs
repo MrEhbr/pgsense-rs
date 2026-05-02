@@ -55,6 +55,17 @@ impl WebhookChannel {
     }
 }
 
+impl WebhookConfig {
+    pub async fn head_check(&self, client: &reqwest::Client) -> Result<reqwest::StatusCode, String> {
+        let resp = client
+            .head(&self.url)
+            .send()
+            .await
+            .map_err(|e| format!("unreachable — {e}"))?;
+        Ok(resp.status())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;

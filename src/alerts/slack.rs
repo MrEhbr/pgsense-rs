@@ -99,6 +99,30 @@ impl SlackChannel {
     }
 }
 
+impl SlackConfig {
+    pub async fn auth_test(&self, client: &reqwest::Client) -> Result<(), String> {
+        let resp = client
+            .post("https://slack.com/api/auth.test")
+            .bearer_auth(self.token.expose_secret())
+            .send()
+            .await
+            .map_err(|e| format!("request failed — {e}"))?;
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("invalid response — {e}"))?;
+        if body.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+            Ok(())
+        } else {
+            let err = body
+                .get("error")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            Err(format!("auth.test rejected — {err}"))
+        }
+    }
+}
+
 impl Inner {
     async fn send(&self, finding: &Finding) -> Result<()> {
         let full = {

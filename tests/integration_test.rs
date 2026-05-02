@@ -3,96 +3,181 @@ use std::process::Command;
 use assert_cmd::prelude::*;
 use predicates::prelude::*;
 
-#[test]
-fn test_help_command() {
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"));
-    cmd.arg("--help");
-
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("Usage:"));
+fn cmd() -> Command {
+    Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"))
 }
 
-#[test]
-fn test_rules_list_command() {
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"));
-    cmd.args(["rules", "--rules", "config/rules.toml", "list"]);
+mod help {
+    use super::*;
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("credit-card"))
-        .stdout(predicate::str::contains("ssn"))
-        .stdout(predicate::str::contains("rules loaded"));
+    #[test]
+    fn shows_usage_and_subcommands() {
+        cmd()
+            .arg("--help")
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Usage:"))
+            .stdout(predicate::str::contains("scan"))
+            .stdout(predicate::str::contains("rules"))
+            .stdout(predicate::str::contains("validate"));
+    }
+
+    #[test]
+    fn rejects_invalid_command() {
+        cmd()
+            .arg("nonexistent")
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("unrecognized subcommand"));
+    }
 }
 
-#[test]
-fn test_rules_test_detects_card() {
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"));
-    cmd.args(["rules", "--rules", "config/rules.toml", "test", "--input", "4111111111111111"]);
+mod rules {
+    mod list {
+        use super::super::*;
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("credit-card"))
-        .stdout(predicate::str::contains("41************11"));
+        #[test]
+        fn shows_builtin_rules() {
+            cmd()
+                .args(["rules", "--rules", "config/rules.toml", "list"])
+                .assert()
+                .success()
+                .stdout(predicate::str::contains("credit-card"))
+                .stdout(predicate::str::contains("ssn"))
+                .stdout(predicate::str::contains("phone"))
+                .stdout(predicate::str::contains("rules loaded"));
+        }
+
+        #[test]
+        fn without_rules_file_fails() {
+            cmd()
+                .args(["rules", "list"])
+                .assert()
+                .failure()
+                .stderr(predicate::str::contains("no rules file specified"));
+        }
+    }
+
+    mod test_cmd {
+        use super::super::*;
+
+        #[test]
+        fn detects_credit_card() {
+            cmd()
+                .args(["rules", "--rules", "config/rules.toml", "test", "--input", "4111111111111111"])
+                .assert()
+                .success()
+                .stdout(predicate::str::contains("credit-card"))
+                .stdout(predicate::str::contains("41************11"));
+        }
+
+        #[test]
+        fn detects_phone() {
+            cmd()
+                .args(["rules", "--rules", "config/rules.toml", "test", "--input", "+44 20 7946 0958"])
+                .assert()
+                .success()
+                .stdout(predicate::str::contains("phone"));
+        }
+
+        #[test]
+        fn reports_no_match() {
+            cmd()
+                .args(["rules", "--rules", "config/rules.toml", "test", "--input", "hello world"])
+                .assert()
+                .success()
+                .stdout(predicate::str::contains("No rules matched"));
+        }
+    }
 }
 
-#[test]
-fn test_rules_test_no_match() {
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"));
-    cmd.args(["rules", "--rules", "config/rules.toml", "test", "--input", "hello world"]);
+mod validate {
+    use super::*;
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("No rules matched"));
-}
+    #[test]
+    fn help_lists_connect_flag() {
+        cmd()
+            .args(["validate", "--help"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("--connect"));
+    }
 
-#[test]
-fn test_rules_list_without_rules_file_fails() {
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"));
-    cmd.args(["rules", "list"]);
+    #[test]
+    fn missing_config_arg_fails() {
+        cmd().arg("validate").assert().failure();
+    }
 
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("no rules file specified"));
-}
+    #[test]
+    fn nonexistent_config_fails() {
+        cmd()
+            .args(["validate", "-c", "/this/path/does/not/exist.toml"])
+            .assert()
+            .failure()
+            .stdout(predicate::str::contains("[ERROR]"));
+    }
 
-#[test]
-fn test_scan_appears_in_help() {
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"));
-    cmd.arg("--help");
+    #[test]
+    fn valid_config_succeeds() {
+        cmd()
+            .args(["validate", "-c", "config/config.toml", "-r", "config/rules.toml"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("0 errors"));
+    }
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("scan"))
-        .stdout(predicate::str::contains("rules"));
-}
+    #[test]
+    fn invalid_rules_regex_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let rules_path = dir.path().join("bad-rules.toml");
+        std::fs::write(
+            &rules_path,
+            r#"[[rules]]
+id = "bad"
+description = "x"
+category = "TEST"
+severity = "medium"
+type = "regex"
+pattern = "[invalid"
+"#,
+        )
+        .unwrap();
 
-#[test]
-fn test_rules_list_shows_phone() {
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"));
-    cmd.args(["rules", "--rules", "config/rules.toml", "list"]);
+        cmd()
+            .args(["validate", "-c", "config/config.toml", "-r", rules_path.to_str().unwrap()])
+            .assert()
+            .failure()
+            .stdout(predicate::str::contains("invalid regex"));
+    }
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("phone"));
-}
+    #[test]
+    fn invalid_postgres_schema_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.toml");
+        std::fs::write(
+            &config_path,
+            r#"
+[[databases]]
+host = "localhost"
+dbname = "mydb"
+username = "postgres"
+password = "x"
 
-#[test]
-fn test_rules_test_detects_phone() {
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"));
-    cmd.args(["rules", "--rules", "config/rules.toml", "test", "--input", "+44 20 7946 0958"]);
+[alerts.postgres]
+host = "localhost"
+dbname = "postgres"
+username = "postgres"
+password = "x"
+schema = "bad-schema"
+table = "findings"
+"#,
+        )
+        .unwrap();
 
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("phone"));
-}
-
-#[test]
-fn test_invalid_command() {
-    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin!("pgsense-rs"));
-    cmd.arg("nonexistent");
-
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("unrecognized subcommand"));
+        cmd()
+            .args(["validate", "-c", config_path.to_str().unwrap()])
+            .assert()
+            .failure()
+            .stdout(predicate::str::contains("invalid schema name"));
+    }
 }

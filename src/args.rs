@@ -17,11 +17,15 @@ pub enum Command {
 
     /// Start scanning PostgreSQL replication stream for sensitive data
     Scan(commands::scan::Args),
+
+    /// Validate the configuration without starting any pipelines
+    Validate(commands::validate::Args),
 }
 
 pub async fn route(args: Args) -> Result<()> {
     match args.command {
         Command::Rules(cmd_args) => commands::rules::run(cmd_args),
         Command::Scan(cmd_args) => commands::scan::run(cmd_args).await,
+        Command::Validate(cmd_args) => commands::validate::run(cmd_args).await,
     }
 }

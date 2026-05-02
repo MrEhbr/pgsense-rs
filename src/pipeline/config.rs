@@ -1,11 +1,11 @@
-use std::path::PathBuf;
+use std::{fmt::Display, path::PathBuf};
 
 use anyhow::{Result, bail};
 use etl::config::{BatchConfig, PgConnectionConfig, PipelineConfig, TableSyncCopyConfig, TlsConfig};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
-use crate::scanner::ScanFilter;
+use crate::{alerts::postgres::is_valid_identifier, scanner::ScanFilter, validation::Validate};
 
 /// Per-database connection configuration. Each `[[databases]]` entry in the
 /// config file maps to one of these.
@@ -64,6 +64,28 @@ impl DatabaseConfig {
     }
 }
 
+impl Validate for DatabaseConfig {
+    fn validate(&self, name: &str) -> Vec<String> {
+        let mut errs = Vec::new();
+        if self.host.trim().is_empty() {
+            errs.push(format!("database '{name}': host is empty"));
+        }
+        if self.port == 0 {
+            errs.push(format!("database '{name}': port must not be 0"));
+        }
+        if self.dbname.trim().is_empty() {
+            errs.push(format!("database '{name}': dbname is empty"));
+        }
+        if self.username.trim().is_empty() {
+            errs.push(format!("database '{name}': username is empty"));
+        }
+        if self.publication.trim().is_empty() {
+            errs.push(format!("database '{name}': publication is empty"));
+        }
+        errs
+    }
+}
+
 impl Default for DatabaseConfig {
     fn default() -> Self {
         Self {
@@ -101,6 +123,16 @@ impl Default for SqliteStoreConfig {
     }
 }
 
+impl Validate for SqliteStoreConfig {
+    fn validate(&self, name: &str) -> Vec<String> {
+        let mut errs = Vec::new();
+        if self.path.trim().is_empty() {
+            errs.push(format!("store '{name}': path is empty"));
+        }
+        errs
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct PostgresStoreConfig {
@@ -114,6 +146,31 @@ pub struct PostgresStoreConfig {
     pub password_file: Option<PathBuf>,
     pub schema: String,
     pub tls: TlsSettings,
+}
+
+impl Validate for PostgresStoreConfig {
+    fn validate(&self, name: &str) -> Vec<String> {
+        let mut errs = Vec::new();
+        if self.host.trim().is_empty() {
+            errs.push(format!("store '{name}': host is empty"));
+        }
+        if self.port == 0 {
+            errs.push(format!("store '{name}': port must not be 0"));
+        }
+        if self.dbname.trim().is_empty() {
+            errs.push(format!("store '{name}': dbname is empty"));
+        }
+        if self.username.trim().is_empty() {
+            errs.push(format!("store '{name}': username is empty"));
+        }
+        if !is_valid_identifier(&self.schema) {
+            errs.push(format!(
+                "store '{name}': invalid schema name '{}' (must be ASCII alphanumeric or underscore)",
+                self.schema
+            ));
+        }
+        errs
+    }
 }
 
 impl Default for PostgresStoreConfig {
@@ -138,6 +195,16 @@ pub enum StoreType {
     Memory,
     Postgres(PostgresStoreConfig),
     Sqlite(SqliteStoreConfig),
+}
+
+impl Display for StoreType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StoreType::Memory => write!(f, "memory"),
+            StoreType::Postgres(_) => write!(f, "postgres"),
+            StoreType::Sqlite(_) => write!(f, "sqlite"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

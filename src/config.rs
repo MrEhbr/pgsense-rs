@@ -14,6 +14,7 @@ use crate::{
     pipeline::config::{DatabaseConfig, PipelineSettings, StoreType},
     rules::config::RuleConfig,
     scanner::ScanFilter,
+    validation::Validate,
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
@@ -89,18 +90,34 @@ impl Config {
         Ok(config)
     }
     pub fn validate(&self) -> Result<()> {
+        let mut errs = Vec::new();
+
         if self.databases.is_empty() {
-            bail!("no databases configured — add at least one [[databases]] entry to your config file");
+            errs.push("no databases configured — add at least one [[databases]] entry to your config file".to_string());
         }
 
         let mut seen = HashSet::new();
         for db in &self.databases {
             let id = db.database_id();
             if !seen.insert(id.clone()) {
-                bail!("duplicate database '{id}' — each host/dbname combination must be unique");
+                errs.push(format!(
+                    "duplicate database '{id}' — each host/dbname combination must be unique"
+                ));
             }
+            errs.extend(db.validate(&id));
         }
 
+        match &self.pipeline.store {
+            StoreType::Memory => {},
+            StoreType::Postgres(cfg) => errs.extend(cfg.validate("postgres-store")),
+            StoreType::Sqlite(cfg) => errs.extend(cfg.validate("sqlite-store")),
+        }
+
+        errs.extend(self.alerts.validate());
+
+        if !errs.is_empty() {
+            bail!("config invalid:\n  - {}", errs.join("\n  - "));
+        }
         Ok(())
     }
 

@@ -124,7 +124,7 @@ impl PostgresChannel {
     }
 }
 
-fn is_valid_identifier(s: &str) -> bool {
+pub(crate) fn is_valid_identifier(s: &str) -> bool {
     !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
