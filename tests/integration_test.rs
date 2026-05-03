@@ -89,6 +89,85 @@ mod rules {
                 .stdout(predicate::str::contains("No rules matched"));
         }
     }
+
+    mod bench {
+        use super::super::*;
+
+        #[test]
+        fn with_generate_prints_table() {
+            cmd()
+                .args(["rules", "--rules", "config/rules.toml", "bench", "--generate", "10", "--iterations", "10"])
+                .assert()
+                .success()
+                .stdout(predicate::str::contains("RULE ID"))
+                .stdout(predicate::str::contains("MEAN"))
+                .stdout(predicate::str::contains("P95"))
+                .stdout(predicate::str::contains("Engine scan_value()"));
+        }
+
+        #[test]
+        fn with_input_runs() {
+            cmd()
+                .args([
+                    "rules",
+                    "--rules",
+                    "config/rules.toml",
+                    "bench",
+                    "--input",
+                    "4111111111111111",
+                    "--iterations",
+                    "5",
+                ])
+                .assert()
+                .success()
+                .stdout(predicate::str::contains("credit-card"));
+        }
+
+        #[test]
+        fn json_format_is_valid() {
+            let out = cmd()
+                .args([
+                    "rules",
+                    "--rules",
+                    "config/rules.toml",
+                    "bench",
+                    "--generate",
+                    "5",
+                    "--iterations",
+                    "5",
+                    "--format",
+                    "json",
+                ])
+                .assert()
+                .success()
+                .get_output()
+                .stdout
+                .clone();
+            let parsed: serde_json::Value = serde_json::from_slice(&out).expect("output must be valid JSON");
+            assert!(parsed["rules"].is_array());
+            assert!(parsed["engine"]["mean"].is_string());
+            assert_eq!(parsed["config"]["iterations"], 5);
+            assert_eq!(parsed["config"]["values"], 5);
+        }
+
+        #[test]
+        fn no_input_uses_default_generate() {
+            cmd()
+                .args(["rules", "--rules", "config/rules.toml", "bench", "--iterations", "5"])
+                .assert()
+                .success()
+                .stdout(predicate::str::contains("100 values"));
+        }
+
+        #[test]
+        fn input_flags_are_mutually_exclusive() {
+            cmd()
+                .args(["rules", "--rules", "config/rules.toml", "bench", "--input", "x", "--generate", "10"])
+                .assert()
+                .failure()
+                .stderr(predicate::str::contains("cannot be used with"));
+        }
+    }
 }
 
 mod validate {
