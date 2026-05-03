@@ -33,7 +33,16 @@ body = """
                 {{ commit.message }} - ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/commit/{{ commit.id }})) - {{ commit.author.name }}
         {% endif -%}
     {% endfor -%}
-{% endfor %}\n
+{% endfor %}
+### Statistics
+
+- {{ statistics.commit_count }} commit(s) contributed to the release.
+- {{ statistics.commits_timespan | default(value=0) }} day(s) between first and last commit.
+- {{ statistics.conventional_commit_count }} commit(s) parsed as conventional.
+{%- if statistics.days_passed_since_last_release %}
+- {{ statistics.days_passed_since_last_release }} day(s) since the previous release.
+{%- endif %}
+\n
 """
 footer = ""
 trim = true
