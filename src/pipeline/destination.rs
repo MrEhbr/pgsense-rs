@@ -1,21 +1,19 @@
-use std::{collections::HashMap, sync::Arc};
-
 use etl::{
-    destination::Destination,
+    destination::{
+        Destination,
+        async_result::{TruncateTableResult, WriteEventsResult, WriteTableRowsResult},
+    },
     error::EtlResult,
-    types::{Event, TableId, TableRow},
+    types::{Event, ReplicatedTableSchema, TableRow},
 };
-use tokio::sync::{RwLock, mpsc};
-use tracing::{debug, trace};
+use tokio::sync::mpsc;
+use tracing::trace;
 
 use crate::{
-    events::{ColumnMeta, ScanEvent, TableMeta, extract_scan_events},
+    events::{ScanEvent, extract_scan_events},
     metrics,
     scanner::ScanFilter,
 };
-
-/// Registry of table schemas, updated from Relation events.
-pub type TableRegistry = Arc<RwLock<HashMap<TableId, TableMeta>>>;
 
 /// Instead of writing data to an external system, extracts column values from
 /// each event and forwards them as ScanEvents for rule matching.
@@ -24,17 +22,11 @@ pub struct ScannerDestination {
     database: String,
     filter: ScanFilter,
     event_tx: mpsc::Sender<Vec<ScanEvent>>,
-    table_registry: TableRegistry,
 }
 
 impl ScannerDestination {
-    pub fn new(database: String, filter: ScanFilter, event_tx: mpsc::Sender<Vec<ScanEvent>>, table_registry: TableRegistry) -> Self {
-        Self {
-            database,
-            filter,
-            event_tx,
-            table_registry,
-        }
+    pub fn new(database: String, filter: ScanFilter, event_tx: mpsc::Sender<Vec<ScanEvent>>) -> Self {
+        Self { database, filter, event_tx }
     }
 }
 
@@ -43,47 +35,23 @@ impl Destination for ScannerDestination {
         "pgsense-scanner"
     }
 
-    async fn truncate_table(&self, _table_id: TableId) -> EtlResult<()> {
+    async fn truncate_table(&self, _replicated_table_schema: &ReplicatedTableSchema, async_result: TruncateTableResult<()>) -> EtlResult<()> {
+        async_result.send(Ok(()));
         Ok(())
     }
 
-    async fn write_table_rows(&self, _table_id: TableId, _rows: Vec<TableRow>) -> EtlResult<()> {
+    async fn write_table_rows(
+        &self,
+        _replicated_table_schema: &ReplicatedTableSchema,
+        _table_rows: Vec<TableRow>,
+        async_result: WriteTableRowsResult<()>,
+    ) -> EtlResult<()> {
+        async_result.send(Ok(()));
         Ok(())
     }
 
-    async fn write_events(&self, events: Vec<Event>) -> EtlResult<()> {
-        {
-            let mut registry = self.table_registry.write().await;
-            for event in &events {
-                if let Event::Relation(rel) = event {
-                    let meta = TableMeta {
-                        schema: rel.table_schema.name.schema.clone(),
-                        name: rel.table_schema.name.name.clone(),
-                        columns: rel
-                            .table_schema
-                            .column_schemas
-                            .iter()
-                            .map(|c| ColumnMeta {
-                                name: c.name.clone(),
-                                type_name: c.typ.name().to_string(),
-                                primary: c.primary,
-                            })
-                            .collect(),
-                    };
-                    debug!(
-                        table_id = ?rel.table_schema.id,
-                        schema = %meta.schema,
-                        table = %meta.name,
-                        columns = meta.columns.len(),
-                        "registered table schema"
-                    );
-                    registry.insert(rel.table_schema.id, meta);
-                }
-            }
-        }
-
-        let registry = self.table_registry.read().await;
-        let scan_events = extract_scan_events(&events, &registry, &self.database);
+    async fn write_events(&self, events: Vec<Event>, async_result: WriteEventsResult<()>) -> EtlResult<()> {
+        let scan_events = extract_scan_events(&events, &self.database);
 
         let scan_events: Vec<ScanEvent> = scan_events
             .into_iter()
@@ -121,6 +89,7 @@ impl Destination for ScannerDestination {
             .with_label_values(&[&self.database])
             .set(depth);
 
+        async_result.send(Ok(()));
         Ok(())
     }
 }

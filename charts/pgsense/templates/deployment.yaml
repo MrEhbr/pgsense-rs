@@ -83,11 +83,6 @@ spec:
               mountPath: /secrets/alerts-postgres
               readOnly: true
             {{- end }}
-            {{- if and (ne (kindOf .Values.pipeline.store) "string") .Values.pipeline.store .Values.pipeline.store.postgres .Values.pipeline.store.postgres.passwordSecret .Values.pipeline.store.postgres.passwordSecret.name }}
-            - name: store-postgres-secret
-              mountPath: /secrets/store-postgres
-              readOnly: true
-            {{- end }}
       volumes:
         - name: config
           configMap:
@@ -109,14 +104,6 @@ spec:
             items:
               - key: {{ .Values.alerts.postgres.passwordSecret.key }}
                 path: {{ .Values.alerts.postgres.passwordSecret.key }}
-        {{- end }}
-        {{- if and (ne (kindOf .Values.pipeline.store) "string") .Values.pipeline.store .Values.pipeline.store.postgres .Values.pipeline.store.postgres.passwordSecret .Values.pipeline.store.postgres.passwordSecret.name }}
-        - name: store-postgres-secret
-          secret:
-            secretName: {{ .Values.pipeline.store.postgres.passwordSecret.name }}
-            items:
-              - key: {{ .Values.pipeline.store.postgres.passwordSecret.key }}
-                path: {{ .Values.pipeline.store.postgres.passwordSecret.key }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

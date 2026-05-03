@@ -184,7 +184,7 @@ mod tests {
             verbosity: Verbosity::default(),
         };
         let result = apply_overrides(&args, config);
-        assert_eq!(result.pipeline.batch_max_size, 1000);
+        assert_eq!(result.pipeline.batch_max_fill_ms, 1000);
         assert_eq!(result.alerts.dedup_window_seconds, 300);
         assert!(!result.server.enabled);
         assert_eq!(result.server.port, 9090);

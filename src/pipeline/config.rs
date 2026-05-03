@@ -1,11 +1,11 @@
 use std::{fmt::Display, path::PathBuf};
 
 use anyhow::{Result, bail};
-use etl::config::{BatchConfig, PgConnectionConfig, PipelineConfig, TableSyncCopyConfig, TlsConfig};
+use etl::config::{BatchConfig, InvalidatedSlotBehavior, PgConnectionConfig, PipelineConfig, TableSyncCopyConfig, TcpKeepaliveConfig, TlsConfig};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
-use crate::{alerts::postgres::is_valid_identifier, scanner::ScanFilter, validation::Validate};
+use crate::{scanner::ScanFilter, validation::Validate};
 
 /// Per-database connection configuration. Each `[[databases]]` entry in the
 /// config file maps to one of these.
@@ -59,7 +59,7 @@ impl DatabaseConfig {
                 enabled: self.tls.enabled,
                 trusted_root_certs: self.tls.trusted_root_certs.clone(),
             },
-            keepalive: None,
+            keepalive: TcpKeepaliveConfig::default(),
         }
     }
 }
@@ -109,100 +109,24 @@ pub struct TlsSettings {
     pub trusted_root_certs: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default)]
-pub struct SqliteStoreConfig {
-    pub path: String,
-}
-
-impl Default for SqliteStoreConfig {
-    fn default() -> Self {
-        Self {
-            path: "pgsense-state.db".to_string(),
-        }
-    }
-}
-
-impl Validate for SqliteStoreConfig {
-    fn validate(&self, name: &str) -> Vec<String> {
-        let mut errs = Vec::new();
-        if self.path.trim().is_empty() {
-            errs.push(format!("store '{name}': path is empty"));
-        }
-        errs
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(default)]
-pub struct PostgresStoreConfig {
-    pub host: String,
-    pub port: u16,
-    pub dbname: String,
-    pub username: String,
-    #[serde(skip_serializing)]
-    pub password: Option<SecretString>,
-    #[serde(skip_serializing)]
-    pub password_file: Option<PathBuf>,
-    pub schema: String,
-    pub tls: TlsSettings,
-}
-
-impl Validate for PostgresStoreConfig {
-    fn validate(&self, name: &str) -> Vec<String> {
-        let mut errs = Vec::new();
-        if self.host.trim().is_empty() {
-            errs.push(format!("store '{name}': host is empty"));
-        }
-        if self.port == 0 {
-            errs.push(format!("store '{name}': port must not be 0"));
-        }
-        if self.dbname.trim().is_empty() {
-            errs.push(format!("store '{name}': dbname is empty"));
-        }
-        if self.username.trim().is_empty() {
-            errs.push(format!("store '{name}': username is empty"));
-        }
-        if !is_valid_identifier(&self.schema) {
-            errs.push(format!(
-                "store '{name}': invalid schema name '{}' (must be ASCII alphanumeric or underscore)",
-                self.schema
-            ));
-        }
-        errs
-    }
-}
-
-impl Default for PostgresStoreConfig {
-    fn default() -> Self {
-        Self {
-            host: "localhost".to_string(),
-            port: 5432,
-            dbname: "postgres".to_string(),
-            username: "postgres".to_string(),
-            password: None,
-            password_file: None,
-            schema: "pgsense".to_string(),
-            tls: TlsSettings::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+/// Where the pipeline persists its replication state.
+///
+/// `Postgres` writes state into the source database under a hardcoded `etl`
+/// schema (etl crate's convention) — co-locating state with the source keeps
+/// backups and restores consistent.
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum StoreType {
     #[default]
     Memory,
-    Postgres(PostgresStoreConfig),
-    Sqlite(SqliteStoreConfig),
+    Postgres,
 }
 
 impl Display for StoreType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             StoreType::Memory => write!(f, "memory"),
-            StoreType::Postgres(_) => write!(f, "postgres"),
-            StoreType::Sqlite(_) => write!(f, "sqlite"),
+            StoreType::Postgres => write!(f, "postgres"),
         }
     }
 }
@@ -211,11 +135,13 @@ impl Display for StoreType {
 #[serde(default)]
 pub struct PipelineSettings {
     pub store: StoreType,
-    pub batch_max_size: usize,
     pub batch_max_fill_ms: u64,
+    pub batch_memory_budget_ratio: f32,
     pub table_error_retry_delay_ms: u64,
     pub table_error_retry_max_attempts: u32,
     pub max_table_sync_workers: u16,
+    pub max_copy_connections_per_table: u16,
+    pub memory_refresh_interval_ms: u64,
 }
 
 impl PipelineSettings {
@@ -229,13 +155,17 @@ impl PipelineSettings {
             publication_name: publication_name.to_string(),
             pg_connection,
             batch: BatchConfig {
-                max_size: self.batch_max_size,
                 max_fill_ms: self.batch_max_fill_ms,
+                memory_budget_ratio: self.batch_memory_budget_ratio,
             },
             table_error_retry_delay_ms: self.table_error_retry_delay_ms,
             table_error_retry_max_attempts: self.table_error_retry_max_attempts,
             max_table_sync_workers: self.max_table_sync_workers,
+            max_copy_connections_per_table: self.max_copy_connections_per_table,
+            memory_refresh_interval_ms: self.memory_refresh_interval_ms,
+            memory_backpressure: None,
             table_sync_copy: TableSyncCopyConfig::SkipAllTables,
+            invalidated_slot_behavior: InvalidatedSlotBehavior::Error,
         })
     }
 }
@@ -244,11 +174,16 @@ impl Default for PipelineSettings {
     fn default() -> Self {
         Self {
             store: StoreType::default(),
-            batch_max_size: 1000,
-            batch_max_fill_ms: 5000,
-            table_error_retry_delay_ms: 10000,
-            table_error_retry_max_attempts: 5,
-            max_table_sync_workers: 4,
+            // Lower than etl's default (10s) — for passive scanning, latency
+            // matters and we don't accumulate enough volume to hit the memory
+            // budget on its own.
+            batch_max_fill_ms: 1000,
+            batch_memory_budget_ratio: BatchConfig::DEFAULT_MEMORY_BUDGET_RATIO,
+            table_error_retry_delay_ms: PipelineConfig::DEFAULT_TABLE_ERROR_RETRY_DELAY_MS,
+            table_error_retry_max_attempts: PipelineConfig::DEFAULT_TABLE_ERROR_RETRY_MAX_ATTEMPTS,
+            max_table_sync_workers: PipelineConfig::DEFAULT_MAX_TABLE_SYNC_WORKERS,
+            max_copy_connections_per_table: PipelineConfig::DEFAULT_MAX_COPY_CONNECTIONS_PER_TABLE,
+            memory_refresh_interval_ms: PipelineConfig::DEFAULT_MEMORY_REFRESH_INTERVAL_MS,
         }
     }
 }

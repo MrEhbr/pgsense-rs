@@ -55,20 +55,12 @@ password = "postgres"
 # max_table_sync_workers = 4
 
 # Store backend for LSN checkpointing — shared across all databases.
-# Default: memory (state lost on restart). Pick ONE alternative:
+# Default: memory (state lost on restart). Set to "postgres" to persist
+# state in each source DB under the `etl` schema, using the same
+# credentials as the replication connection.
 #
 # store = "memory"
-#
-# [pipeline.store.postgres]
-# host = "localhost"
-# port = 5432
-# dbname = "postgres"
-# username = "postgres"
-# password = "postgres"
-# schema = "pgsense"
-#
-# [pipeline.store.sqlite]
-# path = "pgsense-state.db"
+# store = "postgres"
 
 # --- Scan filters (top-level defaults, can be overridden per database) ---
 

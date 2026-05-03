@@ -51,34 +51,7 @@ data:
     table_error_retry_delay_ms = {{ .Values.pipeline.tableErrorRetryDelayMs }}
     table_error_retry_max_attempts = {{ .Values.pipeline.tableErrorRetryMaxAttempts }}
     max_table_sync_workers = {{ .Values.pipeline.maxTableSyncWorkers }}
-
-    {{- if and (ne (kindOf .Values.pipeline.store) "string") .Values.pipeline.store }}
-    {{- if .Values.pipeline.store.postgres }}
-    [pipeline.store.postgres]
-    host = {{ .Values.pipeline.store.postgres.host | quote }}
-    port = {{ default 5432 .Values.pipeline.store.postgres.port }}
-    dbname = {{ default "postgres" .Values.pipeline.store.postgres.dbname | quote }}
-    username = {{ default "postgres" .Values.pipeline.store.postgres.username | quote }}
-    {{- if .Values.pipeline.store.postgres.password }}
-    password = {{ .Values.pipeline.store.postgres.password | quote }}
-    {{- else if and .Values.pipeline.store.postgres.passwordSecret .Values.pipeline.store.postgres.passwordSecret.name }}
-    password_file = "/secrets/store-postgres/{{ .Values.pipeline.store.postgres.passwordSecret.key }}"
-    {{- else if .Values.pipeline.store.postgres.passwordFile }}
-    password_file = {{ .Values.pipeline.store.postgres.passwordFile | quote }}
-    {{- end }}
-    schema = {{ default "pgsense" .Values.pipeline.store.postgres.schema | quote }}
-    {{- if .Values.pipeline.store.postgres.tls }}
-    tls.enabled = {{ default false .Values.pipeline.store.postgres.tls.enabled }}
-    {{- if .Values.pipeline.store.postgres.tls.trustedRootCerts }}
-    tls.trusted_root_certs = {{ .Values.pipeline.store.postgres.tls.trustedRootCerts | quote }}
-    {{- end }}
-    {{- end }}
-    {{- end }}
-    {{- if .Values.pipeline.store.sqlite }}
-    [pipeline.store.sqlite]
-    path = {{ .Values.pipeline.store.sqlite.path | quote }}
-    {{- end }}
-    {{- end }}
+    store = {{ .Values.pipeline.store | quote }}
 
     [scan]
     {{- if .Values.scan.includeSchemas }}

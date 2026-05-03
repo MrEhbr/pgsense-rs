@@ -5,11 +5,10 @@ use std::time::Duration;
 use pgsense_rs::{
     events::Action,
     pipeline::{
-        config::{DatabaseConfig, PipelineSettings, PostgresStoreConfig, SqliteStoreConfig, StoreType},
+        config::{DatabaseConfig, PipelineSettings, StoreType},
         runner::PipelineRunner,
     },
 };
-use secrecy::SecretString;
 use support::PgContainer;
 use tokio::{sync::mpsc, time::timeout};
 
@@ -134,7 +133,7 @@ async fn test_restart_catchup(db_cfg: &DatabaseConfig, client: &tokio_postgres::
 }
 
 #[cfg_attr(not(docker), ignore = "Docker daemon not available")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn pipeline_receives_insert_events() {
     let pg = PgContainer::start_with_wal().await;
     let client = pg.setup_database().await;
@@ -144,36 +143,13 @@ async fn pipeline_receives_insert_events() {
 }
 
 #[cfg_attr(not(docker), ignore = "Docker daemon not available")]
-#[tokio::test]
-async fn pipeline_receives_insert_events_sqlite() {
-    let pg = PgContainer::start_with_wal().await;
-    let client = pg.setup_database().await;
-    let db_cfg = pg.db_config("postgres");
-    let tmp_dir = tempfile::tempdir().expect("create temp dir");
-    let db_path = tmp_dir.path().join("test-state.db");
-    let settings = PipelineSettings {
-        store: StoreType::Sqlite(SqliteStoreConfig {
-            path: db_path.to_str().unwrap().to_string(),
-        }),
-        ..PipelineSettings::default()
-    };
-
-    test_insert_events(&db_cfg, &client, &settings).await;
-}
-
-#[cfg_attr(not(docker), ignore = "Docker daemon not available")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn pipeline_receives_insert_events_postgres_store() {
     let pg = PgContainer::start_with_wal().await;
     let client = pg.setup_database().await;
     let db_cfg = pg.db_config("postgres");
     let settings = PipelineSettings {
-        store: StoreType::Postgres(PostgresStoreConfig {
-            host: pg.host.clone(),
-            port: pg.port,
-            password: Some(SecretString::from("postgres")),
-            ..Default::default()
-        }),
+        store: StoreType::Postgres,
         ..PipelineSettings::default()
     };
 
@@ -181,25 +157,7 @@ async fn pipeline_receives_insert_events_postgres_store() {
 }
 
 #[cfg_attr(not(docker), ignore = "Docker daemon not available")]
-#[tokio::test]
-async fn pipeline_catches_up_after_restart_sqlite() {
-    let pg = PgContainer::start_with_wal().await;
-    let client = pg.setup_database().await;
-    let db_cfg = pg.db_config("postgres");
-    let tmp_dir = tempfile::tempdir().expect("create temp dir");
-    let db_path = tmp_dir.path().join("test-state.db");
-    let settings = PipelineSettings {
-        store: StoreType::Sqlite(SqliteStoreConfig {
-            path: db_path.to_str().unwrap().to_string(),
-        }),
-        ..PipelineSettings::default()
-    };
-
-    test_restart_catchup(&db_cfg, &client, &settings).await;
-}
-
-#[cfg_attr(not(docker), ignore = "Docker daemon not available")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn two_pipelines_merge_events_from_two_databases() {
     let pg = PgContainer::start_with_wal().await;
     let client1 = pg.setup_database().await;
@@ -274,7 +232,7 @@ async fn two_pipelines_merge_events_from_two_databases() {
 }
 
 #[cfg_attr(not(docker), ignore = "Docker daemon not available")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn pipeline_reconnect_resumes_events() {
     let pg = PgContainer::start_with_wal().await;
     let client = pg.setup_database().await;
@@ -348,18 +306,13 @@ async fn pipeline_reconnect_resumes_events() {
 }
 
 #[cfg_attr(not(docker), ignore = "Docker daemon not available")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn pipeline_catches_up_after_restart_postgres_store() {
     let pg = PgContainer::start_with_wal().await;
     let client = pg.setup_database().await;
     let db_cfg = pg.db_config("postgres");
     let settings = PipelineSettings {
-        store: StoreType::Postgres(PostgresStoreConfig {
-            host: pg.host.clone(),
-            port: pg.port,
-            password: Some(SecretString::from("postgres")),
-            ..Default::default()
-        }),
+        store: StoreType::Postgres,
         ..PipelineSettings::default()
     };
 

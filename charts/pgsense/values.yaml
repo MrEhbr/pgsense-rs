@@ -67,23 +67,9 @@ pipeline:
   tableErrorRetryDelayMs: 10000
   tableErrorRetryMaxAttempts: 5
   maxTableSyncWorkers: 4
-  # -- Pipeline store backend: "memory", or an object with postgres/sqlite key.
-  # store:
-  #   postgres:
-  #     host: localhost
-  #     port: 5432
-  #     dbname: postgres
-  #     username: postgres
-  #     password: postgres              # inline password
-  #     passwordSecret:                 # or from K8s Secret
-  #       name: my-secret
-  #       key: password
-  #     schema: pgsense
-  #     tls:
-  #       enabled: false
-  #       trustedRootCerts: ""
-  #   sqlite:
-  #     path: pgsense-state.db
+  # -- Pipeline store backend: "memory" (state lost on restart) or
+  # "postgres" (state persisted in each source DB under `etl` schema,
+  # using the same credentials as the replication connection).
   store: memory
 
 log:

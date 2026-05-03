@@ -28,7 +28,7 @@ fn empty_scanner() -> Arc<ArcSwap<Scanner>> {
 }
 
 #[cfg_attr(not(docker), ignore = "Docker daemon not available")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn unit_transitions_to_running_after_start() {
     let pg = PgContainer::start_with_wal().await;
     pg.setup_database().await;
@@ -47,7 +47,7 @@ async fn unit_transitions_to_running_after_start() {
 }
 
 #[cfg_attr(not(docker), ignore = "Docker daemon not available")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn unit_transitions_to_exited_after_shutdown() {
     let pg = PgContainer::start_with_wal().await;
     pg.setup_database().await;
@@ -77,7 +77,7 @@ async fn unit_transitions_to_exited_after_shutdown() {
 }
 
 #[cfg_attr(not(docker), ignore = "Docker daemon not available")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn unit_fails_when_pg_goes_away_and_reconnect_fails() {
     let pg = PgContainer::start_with_wal().await;
     pg.setup_database().await;
@@ -87,9 +87,16 @@ async fn unit_fails_when_pg_goes_away_and_reconnect_fails() {
     let (exit_tx, mut exit_rx) = mpsc::channel::<ExitSignal>(1);
     let mut unit = DatabaseUnit::new(config, empty_scanner(), test_dispatcher().await);
 
-    unit.start(&PipelineSettings::default(), exit_tx)
-        .await
-        .expect("start unit");
+    // Tighten table-error retry so the unit surfaces the failure quickly when
+    // the source DB disappears. With defaults (5 attempts × 10s) the test
+    // would wait ~50s for the failure to propagate.
+    let settings = PipelineSettings {
+        table_error_retry_delay_ms: 200,
+        table_error_retry_max_attempts: 1,
+        ..PipelineSettings::default()
+    };
+
+    unit.start(&settings, exit_tx).await.expect("start unit");
     assert_eq!(unit.status(), PipelineStatus::Running);
 
     // Kill postgres — pipeline will error, reconnect will also fail
@@ -106,7 +113,7 @@ async fn unit_fails_when_pg_goes_away_and_reconnect_fails() {
 }
 
 #[cfg_attr(not(docker), ignore = "Docker daemon not available")]
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn unit_reconnects_after_transient_connection_loss() {
     let pg = PgContainer::start_with_wal().await;
     let client = pg.setup_database().await;
@@ -119,6 +126,23 @@ async fn unit_reconnects_after_transient_connection_loss() {
         .await
         .expect("start unit");
     assert_eq!(unit.status(), PipelineStatus::Running);
+
+    // Wait for the replication walsender to register before trying to kill it.
+    // The unit's `start()` returns once workers are spawned, but the walsender
+    // isn't registered until the worker actually connects.
+    let mut walsender_count: i64 = 0;
+    for _ in 0..30 {
+        walsender_count = client
+            .query_one("SELECT count(*) FROM pg_stat_replication WHERE application_name != ''", &[])
+            .await
+            .expect("count walsenders")
+            .get(0);
+        if walsender_count > 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    assert!(walsender_count > 0, "expected a walsender to be registered");
 
     // Kill the replication walsender backend — PG stays up
     let killed: i64 = client

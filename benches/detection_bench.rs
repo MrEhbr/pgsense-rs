@@ -1,9 +1,10 @@
-use std::{collections::HashMap, hint::black_box};
+use std::{hint::black_box, sync::Arc};
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use etl::types::{Cell, Event, InsertEvent, TableId, TableRow};
+use etl::types::{Cell, Event, InsertEvent, ReplicatedTableSchema, TableId, TableName, TableRow, Type};
+use etl_postgres::types::{ColumnSchema, TableSchema};
 use pgsense_rs::{
-    events::{self, Action, ColumnMeta, ColumnValue, ScanEvent, TableMeta},
+    events::{self, Action, ColumnValue, ScanEvent},
     rules::{
         config::{RuleConfig, RuleType, Severity},
         engine::RuleEngine,
@@ -43,7 +44,7 @@ fn col(name: &str, type_name: &str, value: &str) -> ColumnValue {
 fn event(with_match: bool) -> ScanEvent {
     ScanEvent {
         database: "localhost/bench".to_string(),
-        table_id: etl::types::TableId(1),
+        table_id: TableId::new(1),
         schema_name: "public".to_string(),
         table_name: "t1".to_string(),
         action: Action::Insert,
@@ -105,7 +106,7 @@ fn wide_event() -> ScanEvent {
     }
     ScanEvent {
         database: "localhost/bench".to_string(),
-        table_id: etl::types::TableId(1),
+        table_id: TableId::new(1),
         schema_name: "public".to_string(),
         table_name: "t2".to_string(),
         action: Action::Insert,
@@ -145,7 +146,7 @@ fn bench_value_sizes(c: &mut Criterion) {
     for size in [64, 512, 4096] {
         let ev = ScanEvent {
             database: "localhost/bench".to_string(),
-            table_id: etl::types::TableId(1),
+            table_id: TableId::new(1),
             schema_name: "public".to_string(),
             table_name: "t3".to_string(),
             action: Action::Insert,
@@ -194,79 +195,49 @@ fn bench_profiling_overhead(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_event_extraction(c: &mut Criterion) {
-    let meta = TableMeta {
-        schema: "public".to_string(),
-        name: "t1".to_string(),
-        columns: vec![
-            ColumnMeta {
-                name: "c_pk".into(),
-                type_name: "int8".into(),
-                primary: true,
-            },
-            ColumnMeta {
-                name: "c_int".into(),
-                type_name: "int4".into(),
-                primary: false,
-            },
-            ColumnMeta {
-                name: "c_num".into(),
-                type_name: "numeric".into(),
-                primary: false,
-            },
-            ColumnMeta {
-                name: "c_bool".into(),
-                type_name: "bool".into(),
-                primary: false,
-            },
-            ColumnMeta {
-                name: "c_text1".into(),
-                type_name: "text".into(),
-                primary: false,
-            },
-            ColumnMeta {
-                name: "c_text2".into(),
-                type_name: "varchar".into(),
-                primary: false,
-            },
-            ColumnMeta {
-                name: "c_text3".into(),
-                type_name: "text".into(),
-                primary: false,
-            },
-            ColumnMeta {
-                name: "c_null".into(),
-                type_name: "jsonb".into(),
-                primary: false,
-            },
-        ],
-    };
-
-    let mut registry = HashMap::new();
-    registry.insert(TableId(1), meta);
-
-    let insert = Event::Insert(InsertEvent {
+fn make_event(replicated: ReplicatedTableSchema) -> Event {
+    Event::Insert(InsertEvent {
         start_lsn: 100.into(),
         commit_lsn: 200.into(),
-        table_id: TableId(1),
-        table_row: TableRow {
-            values: vec![
-                Cell::I64(10042),
-                Cell::I32(7),
-                Cell::String("149.99".into()),
-                Cell::Bool(true),
-                Cell::String("short text value".into()),
-                Cell::String("another text value here".into()),
-                Cell::String("yet another text column".into()),
-                Cell::Null,
-            ],
-        },
-    });
+        tx_ordinal: 0,
+        replicated_table_schema: replicated,
+        table_row: TableRow::new(vec![
+            Cell::I64(10042),
+            Cell::I32(7),
+            Cell::String("149.99".into()),
+            Cell::Bool(true),
+            Cell::String("short text value".into()),
+            Cell::String("another text value here".into()),
+            Cell::String("yet another text column".into()),
+            Cell::Null,
+        ]),
+    })
+}
 
-    let batch: Vec<Event> = vec![insert; 100];
+fn bench_event_extraction(c: &mut Criterion) {
+    let columns = vec![
+        ColumnSchema::new("c_pk".into(), Type::INT8, -1, 1, Some(1), false),
+        ColumnSchema::new("c_int".into(), Type::INT4, -1, 2, None, true),
+        ColumnSchema::new("c_num".into(), Type::NUMERIC, -1, 3, None, true),
+        ColumnSchema::new("c_bool".into(), Type::BOOL, -1, 4, None, true),
+        ColumnSchema::new("c_text1".into(), Type::TEXT, -1, 5, None, true),
+        ColumnSchema::new("c_text2".into(), Type::VARCHAR, -1, 6, None, true),
+        ColumnSchema::new("c_text3".into(), Type::TEXT, -1, 7, None, true),
+        ColumnSchema::new("c_null".into(), Type::JSONB, -1, 8, None, true),
+    ];
+    let table_schema = Arc::new(TableSchema::new(
+        TableId::new(1),
+        TableName::new("public".into(), "t1".into()),
+        columns,
+    ));
+    let replicated = ReplicatedTableSchema::all(table_schema);
+
+    // Event isn't Clone (only with test-utils feature), so build the batch by
+    // calling make_event repeatedly.
+    let batch: Vec<Event> = (0..100).map(|_| make_event(replicated.clone())).collect();
 
     c.bench_function("extract/batch_100", |b| {
-        b.iter(|| events::extract_scan_events(black_box(&batch), black_box(&registry), "localhost/bench"));
+        b.iter(|| events::extract_scan_events(black_box(&batch), "localhost/bench"));
     });
 }
 

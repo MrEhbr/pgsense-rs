@@ -1,8 +1,7 @@
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
-use etl::types::{ArrayCell, Cell, Event, InsertEvent, TableId, TableRow, UpdateEvent};
+use etl::types::{ArrayCell, Cell, Event, InsertEvent, TableId, UpdateEvent, UpdatedTableRow};
 
-/// Column types that cannot contain text patterns (skipped during scanning).
 const NON_TEXT_TYPES: &[&str] = &[
     "bool",
     "int2",
@@ -60,21 +59,6 @@ pub struct ScanEvent {
     pub primary_keys: Vec<(String, String)>,
     pub start_lsn: u64,
     pub commit_lsn: u64,
-}
-
-/// Schema metadata for a table, built from Relation events.
-#[derive(Debug, Clone)]
-pub struct TableMeta {
-    pub schema: String,
-    pub name: String,
-    pub columns: Vec<ColumnMeta>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ColumnMeta {
-    pub name: String,
-    pub type_name: String,
-    pub primary: bool,
 }
 
 pub fn cell_to_string(cell: &Cell) -> Option<String> {
@@ -144,77 +128,83 @@ fn array_cell_to_string(arr: &ArrayCell) -> String {
     format!("{{{inner}}}")
 }
 
-fn extract_primary_keys(row: &TableRow, meta: &TableMeta) -> Vec<(String, String)> {
-    row.values
-        .iter()
-        .enumerate()
-        .filter_map(|(i, cell)| {
-            let col = meta.columns.get(i)?;
-            if col.primary {
-                cell_to_string(cell).map(|v| (col.name.clone(), v))
-            } else {
-                None
-            }
-        })
-        .collect()
+fn extract<'a>(pairs: impl IntoIterator<Item = (&'a etl::types::ColumnSchema, &'a Cell)>) -> (Vec<ColumnValue>, Vec<(String, String)>) {
+    let mut columns = Vec::new();
+    let mut primary_keys = Vec::new();
+    for (col, cell) in pairs {
+        let type_name = col.typ.name().to_string();
+        let value = if is_scannable_type(&type_name) { cell_to_string(cell) } else { None };
+        if col.primary_key()
+            && let Some(v) = cell_to_string(cell)
+        {
+            primary_keys.push((col.name.clone(), v));
+        }
+        columns.push(ColumnValue {
+            name: col.name.clone(),
+            type_name,
+            value,
+        });
+    }
+    (columns, primary_keys)
 }
 
-fn extract_columns(row: &TableRow, meta: &TableMeta) -> Vec<ColumnValue> {
-    row.values
-        .iter()
-        .enumerate()
-        .map(|(i, cell)| {
-            let (name, type_name) = meta
-                .columns
-                .get(i)
-                .map(|c| (c.name.clone(), c.type_name.clone()))
-                .unwrap_or_else(|| (format!("col_{i}"), "unknown".to_string()));
-
-            let value = if is_scannable_type(&type_name) { cell_to_string(cell) } else { None };
-
-            ColumnValue { name, type_name, value }
-        })
-        .collect()
-}
-
-pub fn from_insert(event: &InsertEvent, meta: &TableMeta, database: &str) -> ScanEvent {
+pub fn from_insert(event: &InsertEvent, database: &str) -> ScanEvent {
+    let schema = &event.replicated_table_schema;
+    let name = schema.name();
+    let (columns, primary_keys) = extract(schema.column_schemas().zip(event.table_row.values()));
     ScanEvent {
         database: database.to_string(),
-        table_id: event.table_id,
-        schema_name: meta.schema.clone(),
-        table_name: meta.name.clone(),
+        table_id: schema.id(),
+        schema_name: name.schema.clone(),
+        table_name: name.name.clone(),
         action: Action::Insert,
-        columns: extract_columns(&event.table_row, meta),
-        primary_keys: extract_primary_keys(&event.table_row, meta),
+        columns,
+        primary_keys,
         start_lsn: u64::from(event.start_lsn),
         commit_lsn: u64::from(event.commit_lsn),
     }
 }
 
-pub fn from_update(event: &UpdateEvent, meta: &TableMeta, database: &str) -> ScanEvent {
+pub fn from_update(event: &UpdateEvent, database: &str) -> ScanEvent {
+    let schema = &event.replicated_table_schema;
+    let name = schema.name();
+    // Partial rows omit columns emitted as UnchangedToast (their indexes are
+    // listed in `missing_column_indexes`); the present values stay in
+    // replicated-column order so the filter+zip aligns columns to cells.
+    // Primary keys are never UnchangedToast (replica identity requires them),
+    // so PK extraction over this iterator still finds them.
+    let (columns, primary_keys) = match &event.updated_table_row {
+        UpdatedTableRow::Full(row) => extract(schema.column_schemas().zip(row.values())),
+        UpdatedTableRow::Partial(partial) => {
+            let missing: HashSet<usize> = partial.missing_column_indexes().iter().copied().collect();
+            extract(
+                schema
+                    .column_schemas()
+                    .enumerate()
+                    .filter_map(|(i, col)| (!missing.contains(&i)).then_some(col))
+                    .zip(partial.values()),
+            )
+        },
+    };
     ScanEvent {
         database: database.to_string(),
-        table_id: event.table_id,
-        schema_name: meta.schema.clone(),
-        table_name: meta.name.clone(),
+        table_id: schema.id(),
+        schema_name: name.schema.clone(),
+        table_name: name.name.clone(),
         action: Action::Update,
-        columns: extract_columns(&event.table_row, meta),
-        primary_keys: extract_primary_keys(&event.table_row, meta),
+        columns,
+        primary_keys,
         start_lsn: u64::from(event.start_lsn),
         commit_lsn: u64::from(event.commit_lsn),
     }
 }
 
-pub fn extract_scan_events(events: &[Event], table_registry: &std::collections::HashMap<TableId, TableMeta>, database: &str) -> Vec<ScanEvent> {
+pub fn extract_scan_events(events: &[Event], database: &str) -> Vec<ScanEvent> {
     events
         .iter()
         .filter_map(|event| match event {
-            Event::Insert(e) => table_registry
-                .get(&e.table_id)
-                .map(|meta| from_insert(e, meta, database)),
-            Event::Update(e) => table_registry
-                .get(&e.table_id)
-                .map(|meta| from_update(e, meta, database)),
+            Event::Insert(e) => Some(from_insert(e, database)),
+            Event::Update(e) => Some(from_update(e, database)),
             _ => None,
         })
         .collect()
@@ -222,30 +212,25 @@ pub fn extract_scan_events(events: &[Event], table_registry: &std::collections::
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use etl::types::{Cell, TableName, TableRow, Type};
+    use etl_postgres::types::{ColumnSchema, ReplicatedTableSchema, TableSchema};
+
     use super::*;
 
-    fn test_meta() -> TableMeta {
-        TableMeta {
-            schema: "public".to_string(),
-            name: "t1".to_string(),
-            columns: vec![
-                ColumnMeta {
-                    name: "pk".to_string(),
-                    type_name: "int4".to_string(),
-                    primary: true,
-                },
-                ColumnMeta {
-                    name: "col_a".to_string(),
-                    type_name: "text".to_string(),
-                    primary: false,
-                },
-                ColumnMeta {
-                    name: "col_b".to_string(),
-                    type_name: "text".to_string(),
-                    primary: false,
-                },
-            ],
-        }
+    fn test_schema() -> ReplicatedTableSchema {
+        let columns = vec![
+            ColumnSchema::new("pk".into(), Type::INT4, -1, 1, Some(1), false),
+            ColumnSchema::new("col_a".into(), Type::TEXT, -1, 2, None, true),
+            ColumnSchema::new("col_b".into(), Type::TEXT, -1, 3, None, true),
+        ];
+        let table_schema = Arc::new(TableSchema::new(
+            TableId::new(1),
+            TableName::new("public".into(), "t1".into()),
+            columns,
+        ));
+        ReplicatedTableSchema::all(table_schema)
     }
 
     #[rstest::rstest]
@@ -261,12 +246,10 @@ mod tests {
     }
 
     #[test]
-    fn extracts_columns() {
-        let row = TableRow {
-            values: vec![Cell::I32(1), Cell::String("foo".into()), Cell::String("bar".into())],
-        };
-        let meta = test_meta();
-        let cols = extract_columns(&row, &meta);
+    fn extract_full_row() {
+        let row = TableRow::new(vec![Cell::I32(1), Cell::String("foo".into()), Cell::String("bar".into())]);
+        let schema = test_schema();
+        let (cols, pks) = extract(schema.column_schemas().zip(row.values()));
 
         assert_eq!(cols.len(), 3);
         assert_eq!(cols[0].name, "pk");
@@ -275,47 +258,25 @@ mod tests {
         assert_eq!(cols[1].value, Some("foo".into()));
         assert_eq!(cols[2].name, "col_b");
         assert_eq!(cols[2].value, Some("bar".into()));
+
+        assert_eq!(pks, vec![("pk".to_string(), "1".to_string())]);
     }
 
     #[test]
-    fn extracts_primary_keys() {
-        let row = TableRow {
-            values: vec![Cell::I32(1), Cell::String("foo".into()), Cell::String("bar".into())],
-        };
-        let meta = test_meta();
-        let pks = extract_primary_keys(&row, &meta);
-
-        assert_eq!(pks.len(), 1);
-        assert_eq!(pks[0], ("pk".to_string(), "1".to_string()));
-    }
-
-    #[test]
-    fn extracts_composite_primary_keys() {
-        let meta = TableMeta {
-            schema: "public".to_string(),
-            name: "t2".to_string(),
-            columns: vec![
-                ColumnMeta {
-                    name: "pk_a".to_string(),
-                    type_name: "text".to_string(),
-                    primary: true,
-                },
-                ColumnMeta {
-                    name: "pk_b".to_string(),
-                    type_name: "int4".to_string(),
-                    primary: true,
-                },
-                ColumnMeta {
-                    name: "col_a".to_string(),
-                    type_name: "text".to_string(),
-                    primary: false,
-                },
-            ],
-        };
-        let row = TableRow {
-            values: vec![Cell::String("x".into()), Cell::I32(42), Cell::String("y".into())],
-        };
-        let pks = extract_primary_keys(&row, &meta);
+    fn extract_composite_primary_keys() {
+        let columns = vec![
+            ColumnSchema::new("pk_a".into(), Type::TEXT, -1, 1, Some(1), false),
+            ColumnSchema::new("pk_b".into(), Type::INT4, -1, 2, Some(2), false),
+            ColumnSchema::new("col_a".into(), Type::TEXT, -1, 3, None, true),
+        ];
+        let table_schema = Arc::new(TableSchema::new(
+            TableId::new(2),
+            TableName::new("public".into(), "t2".into()),
+            columns,
+        ));
+        let schema = ReplicatedTableSchema::all(table_schema);
+        let row = TableRow::new(vec![Cell::String("x".into()), Cell::I32(42), Cell::String("y".into())]);
+        let (_cols, pks) = extract(schema.column_schemas().zip(row.values()));
 
         assert_eq!(pks.len(), 2);
         assert_eq!(pks[0], ("pk_a".to_string(), "x".to_string()));

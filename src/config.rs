@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use crate::{
     alerts::config::AlertsConfig,
     logging::LogConfig,
-    pipeline::config::{DatabaseConfig, PipelineSettings, StoreType},
+    pipeline::config::{DatabaseConfig, PipelineSettings},
     rules::config::RuleConfig,
     scanner::ScanFilter,
     validation::Validate,
@@ -114,12 +114,6 @@ impl Config {
             errs.extend(db.validate(&id));
         }
 
-        match &self.pipeline.store {
-            StoreType::Memory => {},
-            StoreType::Postgres(cfg) => errs.extend(cfg.validate("postgres-store")),
-            StoreType::Sqlite(cfg) => errs.extend(cfg.validate("sqlite-store")),
-        }
-
         errs.extend(self.alerts.validate());
 
         if !errs.is_empty() {
@@ -128,19 +122,13 @@ impl Config {
         Ok(())
     }
 
-    /// Resolve all `password_file` fields across databases, store, and alert
-    /// configs. Call after loading config and before using connections.
+    /// Resolve all `password_file` fields across databases and alert configs.
+    /// Call after loading config and before using connections.
     pub fn resolve_passwords(&mut self) -> Result<()> {
         for db in &mut self.databases {
             if let Some(path) = &db.password_file {
                 db.password = Some(read_password_file(path)?);
             }
-        }
-
-        if let StoreType::Postgres(ref mut pg) = self.pipeline.store
-            && let Some(path) = &pg.password_file
-        {
-            pg.password = Some(read_password_file(path)?);
         }
 
         if let Some(ref mut pg) = self.alerts.postgres

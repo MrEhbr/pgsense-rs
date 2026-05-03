@@ -1,16 +1,18 @@
-use std::{collections::HashMap, sync::Arc};
-
 use anyhow::{Context, Result};
-use etl::{config::PgConnectionConfig, pipeline::Pipeline, store::both::memory::MemoryStore};
-use tokio::sync::{RwLock, mpsc};
+use etl::{
+    config::PgConnectionConfig,
+    pipeline::Pipeline,
+    store::{MemoryStore, PostgresStore},
+};
+use tokio::sync::mpsc;
 use tracing::info;
 
 use crate::{
     events::ScanEvent,
     pipeline::{
         config::{PipelineSettings, StoreType},
-        destination::{ScannerDestination, TableRegistry},
-        store::{PostgresStore, SqliteStore},
+        destination::ScannerDestination,
+        source_bootstrap,
     },
     scanner::ScanFilter,
 };
@@ -18,7 +20,6 @@ use crate::{
 enum PipelineInner {
     Memory(Pipeline<MemoryStore, ScannerDestination>),
     Postgres(Pipeline<PostgresStore, ScannerDestination>),
-    Sqlite(Pipeline<SqliteStore, ScannerDestination>),
 }
 
 macro_rules! dispatch {
@@ -26,14 +27,12 @@ macro_rules! dispatch {
         match $pipeline {
             PipelineInner::Memory(p) => p.$method(),
             PipelineInner::Postgres(p) => p.$method(),
-            PipelineInner::Sqlite(p) => p.$method(),
         }
     };
     (await $pipeline:expr, $method:ident) => {
         match $pipeline {
             PipelineInner::Memory(p) => p.$method().await,
             PipelineInner::Postgres(p) => p.$method().await,
-            PipelineInner::Sqlite(p) => p.$method().await,
         }
     };
 }
@@ -58,7 +57,6 @@ impl PipelineInner {
 
 pub struct PipelineRunner {
     pipeline: Option<PipelineInner>,
-    table_registry: TableRegistry,
     pipeline_id: u64,
     database: String,
     scan_filter: ScanFilter,
@@ -89,11 +87,19 @@ impl PipelineRunner {
         }
 
         let pg_connection = db.to_pg_connection_config();
-        let table_registry: TableRegistry = Arc::new(RwLock::new(HashMap::new()));
+
+        // The etl pipeline calls `etl.describe_table_schema(...)` and
+        // `etl.describe_table_identity(...)` against the source DB during
+        // table sync. With Postgres store, etl's own migrations install
+        // these; with Memory store nothing else does, so install them here.
+        if pipeline_settings.store == StoreType::Memory {
+            source_bootstrap::apply(&pg_connection)
+                .await
+                .context("source database bootstrap failed")?;
+        }
 
         let mut runner = Self {
             pipeline: None,
-            table_registry,
             pipeline_id,
             database,
             scan_filter,
@@ -113,12 +119,7 @@ impl PipelineRunner {
             .to_pipeline_config(self.pipeline_id, &self.publication, self.pg_connection.clone())
             .context("failed to build pipeline config")?;
 
-        let destination = ScannerDestination::new(
-            self.database.clone(),
-            self.scan_filter.clone(),
-            self.event_tx.clone(),
-            self.table_registry.clone(),
-        );
+        let destination = ScannerDestination::new(self.database.clone(), self.scan_filter.clone(), self.event_tx.clone());
 
         let pipeline = match &self.settings.store {
             StoreType::Memory => {
@@ -126,19 +127,12 @@ impl PipelineRunner {
                 let store = MemoryStore::new();
                 PipelineInner::Memory(Pipeline::new(pipeline_config, store, destination))
             },
-            StoreType::Postgres(pg_store_config) => {
-                info!(schema = %pg_store_config.schema, "using PostgreSQL store (persistent state)");
-                let store = PostgresStore::new(self.pipeline_id, pg_store_config)
+            StoreType::Postgres => {
+                info!("using PostgreSQL store (state persisted in source DB under `etl` schema)");
+                let store = PostgresStore::new(self.pipeline_id, self.pg_connection.clone())
                     .await
                     .map_err(|e| anyhow::anyhow!("Postgres store init failed: {e}"))?;
                 PipelineInner::Postgres(Pipeline::new(pipeline_config, store, destination))
-            },
-            StoreType::Sqlite(sqlite_config) => {
-                info!(path = %sqlite_config.path, "using SQLite store (persistent local file)");
-                let store = SqliteStore::new(self.pipeline_id, &sqlite_config.path)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("SQLite store init failed: {e}"))?;
-                PipelineInner::Sqlite(Pipeline::new(pipeline_config, store, destination))
             },
         };
 
@@ -179,13 +173,8 @@ impl PipelineRunner {
         }
     }
 
-    /// Gracefully shut down the pipeline and wait for all workers to finish.
     pub async fn shutdown(mut self) -> Result<()> {
         let pipeline = self.pipeline.take().context("pipeline already consumed")?;
         pipeline.shutdown_and_wait().await
-    }
-
-    pub fn table_registry(&self) -> &TableRegistry {
-        &self.table_registry
     }
 }

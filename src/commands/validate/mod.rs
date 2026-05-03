@@ -177,21 +177,9 @@ fn validate_databases(databases: &[DatabaseConfig], report: &mut ValidationRepor
 }
 
 fn validate_store(store: &StoreType, report: &mut ValidationReport) {
-    let (kind, errors) = match store {
-        StoreType::Memory => {
-            report.ok("store", "memory");
-            return;
-        },
-        StoreType::Postgres(cfg) => ("postgres", cfg.validate("postgres-store")),
-        StoreType::Sqlite(cfg) => ("sqlite", cfg.validate("sqlite-store")),
-    };
-
-    let had_errors = !errors.is_empty();
-    for msg in errors {
-        report.error("store", msg);
-    }
-    if !had_errors {
-        report.ok("store", format!("{kind} store config valid"));
+    match store {
+        StoreType::Memory => report.ok("store", "memory (state lost on restart)"),
+        StoreType::Postgres => report.ok("store", "postgres (state persisted in source DB under `etl` schema)"),
     }
 }
 

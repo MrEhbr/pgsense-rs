@@ -33,7 +33,7 @@ Supervisor
 ```
 
 Key modules:
-- `pipeline/` — etl integration, `PipelineRunner` (one per database) with `MemoryStore`/`PostgresStore`/`SqliteStore` backends; `DatabaseConfig` for per-database connection + optional scan filter
+- `pipeline/` — etl integration, `PipelineRunner` (one per database) using etl's own `MemoryStore` or `PostgresStore` (state co-located in source DB under `etl` schema); `DatabaseConfig` for per-database connection + optional scan filter; `source_bootstrap.rs` installs `etl.describe_table_schema()` helpers required by etl ≥ `ce88ba7`
 - `pipeline/supervisor/` — `Supervisor` + `DatabaseUnit` lifecycle management (start, reconnect, shutdown per database)
 - `rules/` — `RuleEngine` (RegexSet fast path), validators (Luhn, SSN), builtin rules, masking
 - `events.rs` — `ScanEvent` extraction from etl events, `is_scannable_type()` column-type filtering
@@ -55,7 +55,7 @@ Key modules:
 - Structs with `Default` impl use `#[serde(default)]` at struct level, not per-field functions
 - `anyhow::Result` for error handling throughout
 - Config: TOML-based with env override (`PGSENSE__*`). Example in `config/config.toml`
-- etl dependency pinned to git rev `4f1141e` — requires PostgreSQL 16+
+- etl dependency pinned to git rev `ce88ba7` — requires PostgreSQL 16+
 
 ## Testing
 
@@ -67,6 +67,6 @@ Key modules:
 
 ## Dependencies to Know
 
-- `supabase/etl` — replication streaming. Source at `~/.cargo/git/checkouts/etl-e302a20fce78b38f/4f1141e/`
-- `etl::types::TableId`, `etl::store::both::memory::MemoryStore`, `etl::pipeline::Pipeline`
+- `supabase/etl` — replication streaming. Source at `~/.cargo/git/checkouts/etl-e302a20fce78b38f/ce88ba7/`
+- `etl::types::TableId`, `etl::store::{MemoryStore, PostgresStore}`, `etl::pipeline::Pipeline`
 - Rust `regex` crate has no lookahead/lookbehind — use simple patterns + validator functions
