@@ -7,7 +7,7 @@ src = "src"
 
 [output.html]
 default-theme = "rust"
-preferred-dark-theme = "ayu"
+preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/MrEhbr/pgsense-rs"
 edit-url-template = "https://github.com/MrEhbr/pgsense-rs/edit/main/docs/{path}"
 site-url = "/pgsense-rs/"
