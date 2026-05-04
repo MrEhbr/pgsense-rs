@@ -1,0 +1,42 @@
+[book]
+title = "pgsense-rs"
+description = "Rule-based PostgreSQL replication stream scanner for real-time sensitive data detection."
+authors = ["MrEhbr"]
+language = "en"
+src = "src"
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/MrEhbr/pgsense-rs"
+edit-url-template = "https://github.com/MrEhbr/pgsense-rs/edit/main/docs/{path}"
+site-url = "/pgsense-rs/"
+no-section-label = false
+mathjax-support = false
+admonitions = true
+smart-punctuation = true
+definition-lists = true
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.print]
+enable = false
+
+[output.html.playground]
+runnable = false
+
+[output.html.search]
+enable = true
+limit-results = 30
+teaser-word-count = 30
+use-boolean-and = true
+boost-title = 3
+boost-hierarchy = 2
+boost-paragraph = 1
+expand = true
+heading-split-level = 3
+
+[rust]
+edition = "2024"

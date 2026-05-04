@@ -78,6 +78,12 @@ fuzz target duration="0":
 run +args="--help":
     @cargo run {{ if profile == "release" { "--release" } else { "" } }} -- {{args}}
 
+### Docs targets
+
+# Serve documentation locally with auto-reload
+docs:
+    @mdbook serve docs --open
+
 ### Dev targets
 
 # Run dev environment (--profile bench for observability stack)

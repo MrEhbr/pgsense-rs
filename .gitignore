@@ -13,6 +13,7 @@ bin/
 build/
 target/
 tmp/
+docs/book/
 
 # Cargo lock policy
 # Uncomment for library projects:
