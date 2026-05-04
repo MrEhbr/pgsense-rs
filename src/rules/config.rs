@@ -42,6 +42,9 @@ impl fmt::Display for Severity {
 pub enum Validator {
     Luhn,
     Ssn,
+    Phone,
+    Email,
+    Iban,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]

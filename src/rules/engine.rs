@@ -201,6 +201,9 @@ impl RuleEngine {
                     let valid = match v {
                         Validator::Luhn => validators::luhn(matched_text),
                         Validator::Ssn => validators::ssn(matched_text),
+                        Validator::Phone => validators::phone(matched_text),
+                        Validator::Email => validators::email(matched_text),
+                        Validator::Iban => validators::iban(matched_text),
                     };
                     if !valid {
                         record::<P>(rule_start, &metrics::RULE_SCAN_DURATION, &rule.meta.id);
@@ -452,6 +455,21 @@ mod tests {
             pattern: Some(r"\b[0-9]{13,19}\b".into()),
             validate: Some(Validator::Luhn),
             ..cfg("cc")
+        }];
+        let engine = RuleEngine::new(&configs, false).unwrap();
+        assert_eq!(engine.scan_value(input).len(), expected);
+    }
+
+    #[rstest]
+    #[case(Validator::Email, r"\S+@\S+", "alice@example.com", 1)]
+    #[case(Validator::Email, r"\S+@\S+", "alice@.com", 0)]
+    #[case(Validator::Iban, r"[A-Z0-9]{15,}", "DE89370400440532013000", 1)]
+    #[case(Validator::Iban, r"[A-Z0-9]{15,}", "DE00370400440532013000", 0)]
+    fn extended_validators_gate_regex(#[case] v: Validator, #[case] pattern: &str, #[case] input: &str, #[case] expected: usize) {
+        let configs = vec![RuleConfig {
+            pattern: Some(pattern.into()),
+            validate: Some(v),
+            ..cfg("v")
         }];
         let engine = RuleEngine::new(&configs, false).unwrap();
         assert_eq!(engine.scan_value(input).len(), expected);
