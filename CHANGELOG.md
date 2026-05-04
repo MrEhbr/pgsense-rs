@@ -3,11 +3,41 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 ---
+## [0.5.0](https://github.com/MrEhbr/pgsense-rs/compare/v0.4.0..v0.5.0) - 2026-05-04
+
+### Features
+
+- **(cli)** add validate command for config and connectivity checks - ([d37414a](https://github.com/MrEhbr/pgsense-rs/commit/d37414aaea858de4f5f03855b17656567a10ee05)) - Aleksei Burmistrov
+- **(profiling)** add per-rule and per-phase scan duration metrics - ([bc5a15e](https://github.com/MrEhbr/pgsense-rs/commit/bc5a15e2349f97ea6dc4c23646be108f1dbc6bc0)) - Aleksei Burmistrov
+- **(rules)** add email address detector - ([4a357c4](https://github.com/MrEhbr/pgsense-rs/commit/4a357c46994af0db949fce9febbaab08787007d8)) - Aleksei Burmistrov
+- **(rules)** add IBAN builtin detector - ([db07246](https://github.com/MrEhbr/pgsense-rs/commit/db07246d3a1d87231aa39547900d0a1183f8b69c)) - Aleksei Burmistrov
+- **(rules)** add bench subcommand - ([5fd6793](https://github.com/MrEhbr/pgsense-rs/commit/5fd6793cf9d60a7e8ae67409256ae17da2c84021)) - Aleksei Burmistrov
+- **(telemetry)** add optional OpenTelemetry tracing via otel feature flag - ([6bcd41e](https://github.com/MrEhbr/pgsense-rs/commit/6bcd41e2f01abdd7ac48655d2068470523c52c5b)) - Aleksei Burmistrov- support glob patterns in scan filter and rule scope config - ([38d7f47](https://github.com/MrEhbr/pgsense-rs/commit/38d7f4787627d602540f5cd022d0d58abcb2687f)) - Aleksei Burmistrov
+
+### Miscellaneous Chores
+
+- **(changelog)** add release statistics block - ([387d1a9](https://github.com/MrEhbr/pgsense-rs/commit/387d1a9d78eb69e9ce22a9c44565bc2e15f34b6f)) - Aleksei Burmistrov
+### Refactoring
+
+- **(pipeline)** bump etl, use upstream stores, scan partial UPDATE rows - ([814d84b](https://github.com/MrEhbr/pgsense-rs/commit/814d84be462c975d8f2f3197d51da518ca4d7113)) - Aleksei Burmistrov
+### Statistics
+
+- 9 commit(s) contributed to the release.
+- 42 day(s) between first and last commit.
+- 9 commit(s) parsed as conventional.
+- 46 day(s) since the previous release.
+
 ## [0.4.0](https://github.com/MrEhbr/pgsense-rs/compare/v0.3.0..v0.4.0) - 2026-03-19
 
 ### Features
 
 - **(helm)** expose full config and fix image repository - ([c4b60fc](https://github.com/MrEhbr/pgsense-rs/commit/c4b60fc46c97dda16910575112315b48c01b65f6)) - Aleksei Burmistrov
+### Statistics
+
+- 1 commit(s) contributed to the release.
+- 0 day(s) between first and last commit.
+- 1 commit(s) parsed as conventional.
+
 ## [0.3.0](https://github.com/MrEhbr/pgsense-rs/compare/v0.2.0..v0.3.0) - 2026-03-19
 
 ### CI/CD
@@ -16,6 +46,13 @@ All notable changes to this project will be documented in this file. See [conven
 ### Features
 
 - **(helm)** use adaptive intervals and add process panels - ([6b31652](https://github.com/MrEhbr/pgsense-rs/commit/6b3165281769b2cbd8487e1ec8aef1eab1bbd842)) - Aleksei Burmistrov
+### Statistics
+
+- 2 commit(s) contributed to the release.
+- 0 day(s) between first and last commit.
+- 2 commit(s) parsed as conventional.
+- 1 day(s) since the previous release.
+
 ## [0.2.0](https://github.com/MrEhbr/pgsense-rs/compare/v0.1.0..v0.2.0) - 2026-03-18
 
 ### Bug Fixes
@@ -29,6 +66,13 @@ All notable changes to this project will be documented in this file. See [conven
 ### Miscellaneous Chores
 
 - **(release)** bundle rules.toml in Docker image and archives - ([ca736a5](https://github.com/MrEhbr/pgsense-rs/commit/ca736a5f49f9d55b186e9b3900a103955be82bd6)) - Aleksei Burmistrov
+### Statistics
+
+- 5 commit(s) contributed to the release.
+- 1 day(s) between first and last commit.
+- 5 commit(s) parsed as conventional.
+- 1 day(s) since the previous release.
+
 ## [0.1.0] - 2026-03-17
 
 ### Bug Fixes
@@ -62,5 +106,11 @@ All notable changes to this project will be documented in this file. See [conven
 - **(alerts)** reduce allocations and simplify - ([8377ed0](https://github.com/MrEhbr/pgsense-rs/commit/8377ed0f089c01fa122db8cf13efbb553bc15167)) - Aleksei Burmistrov
 - **(metrics)** migrate to prometheus crate - ([1e5c428](https://github.com/MrEhbr/pgsense-rs/commit/1e5c42874efe020d34269f87579607cedf51ce8c)) - Aleksei Burmistrov- use SecretString for passwords and auth headers - ([d0b9e85](https://github.com/MrEhbr/pgsense-rs/commit/d0b9e858f75382c0a18f401b3ee8702325631463)) - Aleksei Burmistrov
 - clean up code comments - ([ab398c7](https://github.com/MrEhbr/pgsense-rs/commit/ab398c71fa82ae0ce03269f166e9c6c2e00e6630)) - Aleksei Burmistrov
+
+### Statistics
+
+- 22 commit(s) contributed to the release.
+- 33 day(s) between first and last commit.
+- 22 commit(s) parsed as conventional.
 
 
