@@ -18,27 +18,41 @@ body = """
     ## [unreleased]
 {% endif %}\
 {% for group, commits in commits | group_by(attribute="group") %}
-    ### {{ group | striptags | trim | upper_first }}
+{% if not loop.first %}
+{% endif %}### {{ group | striptags | trim | upper_first }}
     {% for commit in commits
     | filter(attribute="scope")
     | sort(attribute="scope") %}
         - **({{commit.scope}})**{% if commit.breaking %} [**breaking**]{% endif %} \
-            {{ commit.message }} - ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/commit/{{ commit.id }})) - {{ commit.author.name }}
-    {%- endfor -%}
-    \n\
+            {{ commit.message }} - ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/commit/{{ commit.id }})) \
+            `+{{ commit.statistics.additions | default(value=0) }} / -{{ commit.statistics.deletions | default(value=0) }} across {{ commit.statistics.files_changed | default(value=0) }} file(s)` - {{ commit.author.name }}
+    {%- endfor %}
     {%- for commit in commits %}
         {%- if commit.scope -%}
-        {% else -%}
-            - {% if commit.breaking %} [**breaking**]{% endif %}\
-                {{ commit.message }} - ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/commit/{{ commit.id }})) - {{ commit.author.name }}
-        {% endif -%}
+        {% else %}
+- {% if commit.breaking %} [**breaking**]{% endif %}\
+    {{ commit.message }} - ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/commit/{{ commit.id }})) \
+    `+{{ commit.statistics.additions | default(value=0) }} / -{{ commit.statistics.deletions | default(value=0) }} across {{ commit.statistics.files_changed | default(value=0) }} file(s)` - {{ commit.author.name }}
+        {%- endif -%}
     {% endfor -%}
+{% endfor %}
+{% set_global total_additions = 0 -%}
+{% set_global total_deletions = 0 -%}
+{% set_global total_files = 0 -%}
+{% for commit in commits -%}
+    {% set additions = commit.statistics.additions | default(value=0) -%}
+    {% set deletions = commit.statistics.deletions | default(value=0) -%}
+    {% set files = commit.statistics.files_changed | default(value=0) -%}
+    {% set_global total_additions = total_additions + additions -%}
+    {% set_global total_deletions = total_deletions + deletions -%}
+    {% set_global total_files = total_files + files -%}
 {% endfor %}
 ### Statistics
 
 - {{ statistics.commit_count }} commit(s) contributed to the release.
 - {{ statistics.commits_timespan | default(value=0) }} day(s) between first and last commit.
 - {{ statistics.conventional_commit_count }} commit(s) parsed as conventional.
+- Diff totals: +{{ total_additions }} / -{{ total_deletions }} across {{ total_files }} file change(s) (sum across commits, may double-count files touched in multiple commits).
 {%- if statistics.days_passed_since_last_release %}
 - {{ statistics.days_passed_since_last_release }} day(s) since the previous release.
 {%- endif %}
