@@ -48,11 +48,13 @@ password = "postgres"
 # --- Pipeline (replication stream processing) ---
 
 # [pipeline]
-# batch_max_size = 1000
-# batch_max_fill_ms = 5000
-# table_error_retry_delay_ms = 10000
-# table_error_retry_max_attempts = 5
-# max_table_sync_workers = 4
+# batch_max_fill_ms = 1000               # max time to hold a batch before flushing
+# batch_memory_budget_ratio = 0.2        # fraction of process memory budget for in-flight batches
+# table_error_retry_delay_ms = 10000     # delay between per-table retries
+# table_error_retry_max_attempts = 5     # cap on per-table retries before giving up
+# max_table_sync_workers = 4             # concurrent initial-sync workers
+# max_copy_connections_per_table = 2     # parallel COPY connections per table during initial sync
+# memory_refresh_interval_ms = 100       # how often to sample process memory for back-pressure
 
 # Store backend for LSN checkpointing — shared across all databases.
 # Default: memory (state lost on restart). Set to "postgres" to persist

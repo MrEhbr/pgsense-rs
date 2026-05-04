@@ -13,7 +13,7 @@
 #
 # Regex-specific fields:
 #   pattern     — regex pattern to match (required for regex type)
-#   validate    — optional post-match validator: "luhn" or "ssn"
+#   validate    — optional post-match validator: "luhn", "ssn", "phone", "email", or "iban"
 #
 # Builtin-specific fields:
 #   builtin     — detector name: "credit_card" or "ssn" (required for builtin type)
