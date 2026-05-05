@@ -2700,7 +2700,7 @@ dependencies = [
  "opentelemetry_sdk",
  "predicates",
  "prometheus",
- "rand 0.9.4",
+ "rand 0.10.1",
  "regex",
  "reqwest 0.13.3",
  "rhai",
