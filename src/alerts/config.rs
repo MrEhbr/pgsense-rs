@@ -3,11 +3,12 @@ use std::{
     path::PathBuf,
 };
 
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     alerts::{jsonl::JsonlChannel, postgres::is_valid_identifier},
+    config::Secret,
     pipeline::config::TlsSettings,
     validation::Validate,
 };
@@ -47,9 +48,7 @@ pub struct PostgresAlertConfig {
     pub dbname: String,
     pub username: String,
     #[serde(skip_serializing)]
-    pub password: Option<SecretString>,
-    #[serde(skip_serializing)]
-    pub password_file: Option<PathBuf>,
+    pub password: Option<Secret>,
     pub schema: String,
     pub table: String,
     pub tls: TlsSettings,
@@ -64,7 +63,6 @@ impl Default for PostgresAlertConfig {
             dbname: "postgres".to_string(),
             username: "postgres".to_string(),
             password: None,
-            password_file: None,
             schema: "pgsense".to_string(),
             table: "findings".to_string(),
             tls: TlsSettings::default(),
@@ -114,7 +112,7 @@ pub struct WebhookConfig {
     pub name: Option<String>,
     pub url: String,
     #[serde(default, skip_serializing)]
-    pub headers: HashMap<String, SecretString>,
+    pub headers: HashMap<String, Secret>,
     #[serde(default = "default_timeout_ms")]
     pub timeout_ms: u64,
 }
@@ -128,7 +126,7 @@ pub struct SlackConfig {
     #[serde(default)]
     pub name: Option<String>,
     #[serde(skip_serializing)]
-    pub token: SecretString,
+    pub token: Secret,
     pub channel: String,
     #[serde(default)]
     pub username: Option<String>,
@@ -232,7 +230,12 @@ impl Validate for WebhookConfig {
 impl Validate for SlackConfig {
     fn validate(&self, name: &str) -> Vec<String> {
         let mut errs = Vec::new();
-        if self.token.expose_secret().is_empty() {
+        // Only check inline secrets here — file-backed tokens are validated by
+        // Config::resolve_secrets, which surfaces a clear IO error with the
+        // file path. Don't double-validate.
+        if let Secret::Inline(s) = &self.token
+            && s.expose_secret().is_empty()
+        {
             errs.push(format!("slack '{name}': token is empty"));
         }
         if self.channel.trim().is_empty() {
@@ -373,7 +376,7 @@ mod tests {
         fn empty_token() {
             let s = SlackConfig {
                 name: None,
-                token: "".to_string().into(),
+                token: Secret::from(""),
                 channel: "#x".into(),
                 username: None,
                 icon_emoji: None,

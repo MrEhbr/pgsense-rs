@@ -5,8 +5,11 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use config::{Environment, File, FileFormat};
-use secrecy::SecretString;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+pub mod secret;
+
+pub use secret::Secret;
 
 use crate::{
     alerts::config::AlertsConfig,
@@ -81,13 +84,13 @@ pub struct Config {
 }
 
 impl Config {
-    /// Load config from file + env vars, resolve `password_file` fields,
+    /// Load config from file + env vars, resolve any file-backed secrets,
     /// apply global scan filter defaults, and validate.
     pub fn load(config_path: Option<&Path>) -> Result<Self> {
         let mut config: Self = load(config_path)?;
         config
-            .resolve_passwords()
-            .context("failed to resolve password files")?;
+            .resolve_secrets()
+            .context("failed to resolve secret files")?;
         for db in &mut config.databases {
             if db.scan.is_none() {
                 db.scan = Some(config.scan.clone());
@@ -122,19 +125,29 @@ impl Config {
         Ok(())
     }
 
-    /// Resolve all `password_file` fields across databases and alert configs.
+    /// Resolve all file-backed secrets across databases and alert configs.
     /// Call after loading config and before using connections.
-    pub fn resolve_passwords(&mut self) -> Result<()> {
+    pub fn resolve_secrets(&mut self) -> Result<()> {
         for db in &mut self.databases {
-            if let Some(path) = &db.password_file {
-                db.password = Some(read_password_file(path)?);
+            if let Some(secret) = &mut db.password {
+                secret.resolve()?;
             }
         }
 
-        if let Some(ref mut pg) = self.alerts.postgres
-            && let Some(path) = &pg.password_file
+        if let Some(pg) = &mut self.alerts.postgres
+            && let Some(secret) = &mut pg.password
         {
-            pg.password = Some(read_password_file(path)?);
+            secret.resolve()?;
+        }
+
+        for s in &mut self.alerts.slack {
+            s.token.resolve()?;
+        }
+
+        for w in &mut self.alerts.webhooks {
+            for v in w.headers.values_mut() {
+                v.resolve()?;
+            }
         }
 
         Ok(())
@@ -155,12 +168,6 @@ pub fn load_rules(path: &Path) -> Result<Vec<RuleConfig>> {
 }
 
 const ENV_PREFIX: &str = "PGSENSE";
-
-/// Read password from a file, trimming trailing whitespace/newlines.
-fn read_password_file(path: &Path) -> Result<SecretString> {
-    let content = std::fs::read_to_string(path).with_context(|| format!("failed to read password file: {}", path.display()))?;
-    Ok(SecretString::from(content.trim_end().to_string()))
-}
 
 /// Load configuration with precedence: env vars (PGSENSE__*) > config file >
 /// defaults.
@@ -183,13 +190,16 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
+    use std::{collections::HashMap, io::Write};
 
     use secrecy::ExposeSecret;
     use tempfile::NamedTempFile;
 
     use super::*;
-    use crate::pipeline::config::DatabaseConfig;
+    use crate::{
+        alerts::config::{SlackConfig, WebhookConfig},
+        pipeline::config::DatabaseConfig,
+    };
 
     fn single_db_config() -> Config {
         Config {
@@ -239,80 +249,171 @@ mod tests {
     }
 
     #[test]
-    fn resolve_passwords_reads_from_file() {
+    fn resolve_secrets_reads_db_password_from_file() {
         let mut file = NamedTempFile::new().unwrap();
         writeln!(file, "s3cret").unwrap();
 
         let mut config = Config {
             databases: vec![DatabaseConfig {
-                password_file: Some(file.path().to_path_buf()),
+                password: Some(Secret::File {
+                    file: file.path().to_path_buf(),
+                }),
                 ..Default::default()
             }],
             ..Default::default()
         };
-        config.resolve_passwords().unwrap();
+        config.resolve_secrets().unwrap();
         assert_eq!(
             config.databases[0]
                 .password
                 .as_ref()
                 .unwrap()
+                .expose()
                 .expose_secret(),
             "s3cret"
         );
     }
 
     #[test]
-    fn resolve_passwords_trims_trailing_newline() {
+    fn resolve_secrets_trims_trailing_newline() {
         let mut file = NamedTempFile::new().unwrap();
         write!(file, "pass\n\n").unwrap();
 
         let mut config = Config {
             databases: vec![DatabaseConfig {
-                password_file: Some(file.path().to_path_buf()),
+                password: Some(Secret::File {
+                    file: file.path().to_path_buf(),
+                }),
                 ..Default::default()
             }],
             ..Default::default()
         };
-        config.resolve_passwords().unwrap();
+        config.resolve_secrets().unwrap();
         assert_eq!(
             config.databases[0]
                 .password
                 .as_ref()
                 .unwrap()
+                .expose()
                 .expose_secret(),
             "pass"
         );
     }
 
     #[test]
-    fn resolve_passwords_missing_file_errors() {
+    fn resolve_secrets_missing_file_errors() {
         let mut config = Config {
             databases: vec![DatabaseConfig {
-                password_file: Some(PathBuf::from("/nonexistent/password")),
+                password: Some(Secret::File {
+                    file: PathBuf::from("/nonexistent/password"),
+                }),
                 ..Default::default()
             }],
             ..Default::default()
         };
-        assert!(config.resolve_passwords().is_err());
+        assert!(config.resolve_secrets().is_err());
     }
 
     #[test]
-    fn resolve_passwords_noop_without_password_file() {
+    fn resolve_secrets_noop_for_inline() {
         let mut config = Config {
             databases: vec![DatabaseConfig {
-                password: Some(SecretString::from("inline")),
+                password: Some(Secret::from("inline")),
                 ..Default::default()
             }],
             ..Default::default()
         };
-        config.resolve_passwords().unwrap();
+        config.resolve_secrets().unwrap();
         assert_eq!(
             config.databases[0]
                 .password
                 .as_ref()
                 .unwrap()
+                .expose()
                 .expose_secret(),
             "inline"
         );
+    }
+
+    #[test]
+    fn resolve_secrets_resolves_slack_token_file() {
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, "xoxb-from-file").unwrap();
+
+        let mut alerts = AlertsConfig::default();
+        alerts.slack.push(SlackConfig {
+            name: None,
+            token: Secret::File {
+                file: file.path().to_path_buf(),
+            },
+            channel: "#x".into(),
+            username: None,
+            icon_emoji: None,
+            timeout_ms: 1000,
+            batch_size: 1,
+            batch_window_ms: 1000,
+            max_retries: 0,
+        });
+        let mut config = Config {
+            databases: vec![DatabaseConfig::default()],
+            alerts,
+            ..Default::default()
+        };
+        config.resolve_secrets().unwrap();
+        assert_eq!(config.alerts.slack[0].token.expose().expose_secret(), "xoxb-from-file");
+    }
+
+    #[test]
+    fn resolve_secrets_resolves_webhook_header_files_and_keeps_inline() {
+        let mut file = NamedTempFile::new().unwrap();
+        write!(file, "Bearer abc123").unwrap();
+
+        let mut alerts = AlertsConfig::default();
+        alerts.webhooks.push(WebhookConfig {
+            name: None,
+            url: "https://example.com".into(),
+            headers: HashMap::from([
+                (
+                    "Authorization".to_string(),
+                    Secret::File {
+                        file: file.path().to_path_buf(),
+                    },
+                ),
+                ("X-Source".to_string(), Secret::from("pgsense")),
+            ]),
+            timeout_ms: 1000,
+        });
+        let mut config = Config {
+            databases: vec![DatabaseConfig::default()],
+            alerts,
+            ..Default::default()
+        };
+        config.resolve_secrets().unwrap();
+        let headers = &config.alerts.webhooks[0].headers;
+        assert_eq!(headers["Authorization"].expose().expose_secret(), "Bearer abc123");
+        assert_eq!(headers["X-Source"].expose().expose_secret(), "pgsense");
+    }
+
+    #[test]
+    fn resolve_secrets_missing_webhook_header_file_errors() {
+        let mut alerts = AlertsConfig::default();
+        alerts.webhooks.push(WebhookConfig {
+            name: None,
+            url: "https://example.com".into(),
+            headers: HashMap::from([(
+                "Authorization".to_string(),
+                Secret::File {
+                    file: PathBuf::from("/nonexistent/header"),
+                },
+            )]),
+            timeout_ms: 1000,
+        });
+        let mut config = Config {
+            databases: vec![DatabaseConfig::default()],
+            alerts,
+            ..Default::default()
+        };
+        let err = config.resolve_secrets().unwrap_err();
+        assert!(err.to_string().contains("failed to read secret file"));
     }
 }

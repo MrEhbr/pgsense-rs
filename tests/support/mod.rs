@@ -2,8 +2,7 @@
 
 use std::{ops::Deref, time::Duration};
 
-use pgsense_rs::pipeline::config::DatabaseConfig;
-use secrecy::SecretString;
+use pgsense_rs::{config::Secret, pipeline::config::DatabaseConfig};
 use testcontainers_modules::{
     postgres::Postgres,
     testcontainers::{ContainerAsync, ImageExt, runners::AsyncRunner},
@@ -127,7 +126,7 @@ impl PgContainer {
             port: self.port,
             dbname: dbname.to_string(),
             username: "postgres".to_string(),
-            password: Some(SecretString::from("postgres")),
+            password: Some(Secret::from("postgres")),
             publication: PUBLICATION.to_string(),
             ..Default::default()
         }

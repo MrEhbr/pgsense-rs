@@ -48,7 +48,7 @@ impl SlackChannel {
             .timeout(Duration::from_millis(config.timeout_ms))
             .default_headers({
                 let mut headers = reqwest::header::HeaderMap::new();
-                let auth = format!("Bearer {}", config.token.expose_secret())
+                let auth = format!("Bearer {}", config.token.expose().expose_secret())
                     .parse::<reqwest::header::HeaderValue>()
                     .context("invalid slack token characters")?;
                 headers.insert(reqwest::header::AUTHORIZATION, auth);
@@ -103,7 +103,7 @@ impl SlackConfig {
     pub async fn auth_test(&self, client: &reqwest::Client) -> Result<(), String> {
         let resp = client
             .post("https://slack.com/api/auth.test")
-            .bearer_auth(self.token.expose_secret())
+            .bearer_auth(self.token.expose().expose_secret())
             .send()
             .await
             .map_err(|e| format!("request failed — {e}"))?;
@@ -413,7 +413,7 @@ mod tests {
     fn test_config() -> SlackConfig {
         SlackConfig {
             name: None,
-            token: "xoxb-test-token".to_string().into(),
+            token: crate::config::Secret::from("xoxb-test-token"),
             channel: "#alerts".to_string(),
             username: Some("pgsense-bot".to_string()),
             icon_emoji: Some(":shield:".to_string()),

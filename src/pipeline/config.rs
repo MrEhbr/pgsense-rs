@@ -1,11 +1,10 @@
-use std::{fmt::Display, path::PathBuf};
+use std::fmt::Display;
 
 use anyhow::{Result, bail};
 use etl::config::{BatchConfig, InvalidatedSlotBehavior, PgConnectionConfig, PipelineConfig, TableSyncCopyConfig, TcpKeepaliveConfig, TlsConfig};
-use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
-use crate::{scanner::ScanFilter, validation::Validate};
+use crate::{config::Secret, scanner::ScanFilter, validation::Validate};
 
 /// Per-database connection configuration. Each `[[databases]]` entry in the
 /// config file maps to one of these.
@@ -17,11 +16,7 @@ pub struct DatabaseConfig {
     pub dbname: String,
     pub username: String,
     #[serde(skip_serializing)]
-    pub password: Option<SecretString>,
-    /// Path to a file containing the password. Takes precedence over
-    /// `password` if set.
-    #[serde(skip_serializing)]
-    pub password_file: Option<PathBuf>,
+    pub password: Option<Secret>,
     pub publication: String,
     pub tls: TlsSettings,
     /// Optional per-database scan filter. Overrides the top-level `[scan]`
@@ -54,7 +49,7 @@ impl DatabaseConfig {
             port: self.port,
             name: self.dbname.clone(),
             username: self.username.clone(),
-            password: self.password.clone(),
+            password: self.password.as_ref().map(|s| s.expose().clone()),
             tls: TlsConfig {
                 enabled: self.tls.enabled,
                 trusted_root_certs: self.tls.trusted_root_certs.clone(),
@@ -94,7 +89,6 @@ impl Default for DatabaseConfig {
             dbname: "postgres".to_string(),
             username: "postgres".to_string(),
             password: None,
-            password_file: None,
             publication: "pgsense_pub".to_string(),
             tls: TlsSettings::default(),
             scan: None,

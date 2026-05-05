@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
 use sqlx::{
     Executor,
     postgres::{PgConnectOptions, PgPoolOptions, PgSslMode},
@@ -10,12 +10,13 @@ use sqlx::{
 use super::ValidationReport;
 use crate::{
     alerts::config::{AlertsConfig, ChannelRef},
+    config::Secret,
     pipeline::config::DatabaseConfig,
 };
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
-async fn connect_pg(host: &str, port: u16, dbname: &str, username: &str, password: Option<&SecretString>, tls_enabled: bool) -> Result<()> {
+async fn connect_pg(host: &str, port: u16, dbname: &str, username: &str, password: Option<&Secret>, tls_enabled: bool) -> Result<()> {
     let ssl_mode = if tls_enabled { PgSslMode::VerifyFull } else { PgSslMode::Prefer };
     let mut opts = PgConnectOptions::new()
         .host(host)
@@ -24,7 +25,7 @@ async fn connect_pg(host: &str, port: u16, dbname: &str, username: &str, passwor
         .username(username)
         .ssl_mode(ssl_mode);
     if let Some(password) = password {
-        opts = opts.password(password.expose_secret());
+        opts = opts.password(password.expose().expose_secret());
     }
     let pool = PgPoolOptions::new()
         .max_connections(1)
@@ -60,7 +61,7 @@ pub(super) async fn check_alerts(alerts: &AlertsConfig, report: &mut ValidationR
                 }
             },
             ChannelRef::Slack(s) => {
-                if s.token.expose_secret().is_empty() {
+                if s.token.expose().expose_secret().is_empty() {
                     report.warn(
                         "alerts",
                         format!("slack '{name}': skipped connectivity check (structural error)"),

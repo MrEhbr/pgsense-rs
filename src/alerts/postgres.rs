@@ -38,7 +38,7 @@ impl PostgresChannel {
             .ssl_mode(ssl_mode);
 
         if let Some(password) = &config.password {
-            connect_options = connect_options.password(password.expose_secret());
+            connect_options = connect_options.password(password.expose().expose_secret());
         }
 
         let pool = PgPoolOptions::new()

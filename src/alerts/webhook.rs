@@ -19,6 +19,7 @@ impl WebhookChannel {
                 .parse::<reqwest::header::HeaderName>()
                 .with_context(|| format!("invalid header name: {key}"))?;
             let val = value
+                .expose()
                 .expose_secret()
                 .parse::<reqwest::header::HeaderValue>()
                 .with_context(|| format!("invalid header value for {key}"))?;
@@ -70,16 +71,15 @@ impl WebhookConfig {
 mod tests {
     use std::collections::HashMap;
 
-    use secrecy::SecretString;
-
     use super::*;
+    use crate::config::Secret;
 
     #[test]
     fn webhook_channel_builds_from_config() {
         let config = WebhookConfig {
             name: None,
             url: "https://hooks.example.com/alert".to_string(),
-            headers: HashMap::from([("Authorization".to_string(), SecretString::from("Bearer tok"))]),
+            headers: HashMap::from([("Authorization".to_string(), Secret::from("Bearer tok"))]),
             timeout_ms: 3000,
         };
         let channel = WebhookChannel::new(&config).unwrap();
@@ -91,7 +91,7 @@ mod tests {
         let config = WebhookConfig {
             name: None,
             url: "https://hooks.example.com".to_string(),
-            headers: HashMap::from([("Invalid\nHeader".to_string(), SecretString::from("value"))]),
+            headers: HashMap::from([("Invalid\nHeader".to_string(), Secret::from("value"))]),
             timeout_ms: 5000,
         };
         assert!(WebhookChannel::new(&config).is_err());

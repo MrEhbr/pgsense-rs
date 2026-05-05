@@ -4,10 +4,10 @@ use std::time::Duration;
 
 use pgsense_rs::{
     alerts::{config::PostgresAlertConfig, postgres::PostgresChannel},
+    config::Secret,
     rules::config::Severity,
     scanner::Finding,
 };
-use secrecy::SecretString;
 use sqlx::{PgPool, postgres::PgConnectOptions};
 use support::PgContainer;
 
@@ -41,7 +41,7 @@ async fn setup() -> TestHarness {
     let config = PostgresAlertConfig {
         host: pg.host.clone(),
         port: pg.port,
-        password: Some(SecretString::from("postgres")),
+        password: Some(Secret::from("postgres")),
         schema: "pgsense_alerts".to_string(),
         ..Default::default()
     };
