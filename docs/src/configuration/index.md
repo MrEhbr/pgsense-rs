@@ -16,7 +16,7 @@ host        = "localhost"
 port        = 5432
 dbname      = "app"
 username    = "pgsense"
-password    = "..."           # or password_file = "/run/secrets/pg_password"
+password    = "..."           # or { file = "/run/secrets/pg_password" }
 publication = "pgsense_pub"
 
 # Optional per-database scan filter
@@ -54,26 +54,41 @@ PGSENSE__PIPELINE__STORE=postgres
 ```
 
 > [!TIP]
-> Env vars are the easiest way to inject secrets in container orchestrators
-> that don't mount files — `password_file` is preferred when secret-as-file
-> is available.
+> Env vars are the easiest way to inject non-secret configuration in
+> container orchestrators that don't mount files. For secrets, prefer the
+> file-backed form below — it avoids leaking values into process listings
+> and child-process environments.
 
-## Secret files
+## Secrets
 
-Both `[[databases]]` and `[alerts.postgres]` accept a `password_file` field.
-If set, the file's contents (with trailing whitespace stripped) are read at
-startup and take precedence over any inline `password`.
+Every secret-bearing field accepts either an inline string or a file
+reference:
+
+```toml
+# Inline (handy for local development)
+password = "literal-value"
+
+# File-backed (recommended for production)
+password = { file = "/run/secrets/pg_password" }
+```
+
+The file's contents are read at startup with trailing whitespace stripped.
+This shape applies to:
+
+- `[[databases]].password`
+- `[alerts.postgres].password`
+- `[[alerts.slack]].token`
+- `[[alerts.webhooks]].headers.<name>` (any header value)
 
 > [!IMPORTANT]
-> When deploying to Kubernetes, mount a `Secret` as a file and point
-> `password_file` at it. This avoids putting plaintext credentials in
-> `ConfigMap` and avoids env-var inheritance leaking secrets into child
-> processes.
+> When deploying to Kubernetes, mount each `Secret` as a file and point
+> the corresponding config field at it. This keeps plaintext credentials
+> out of `ConfigMap` and out of process environments.
 
 ## Loading and validation
 
 At startup, the scanner reads the TOML file, applies env overrides on
-top, resolves `password_file` references, and validates the result.
+top, resolves file-backed secrets, and validates the result.
 Invalid or missing fields fail fast at startup rather than at first
 event. The standalone `validate` CLI subcommand runs the same checks
 (plus optional live connectivity checks) without starting the scanner

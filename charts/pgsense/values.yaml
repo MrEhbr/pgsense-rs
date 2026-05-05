@@ -45,7 +45,7 @@ databases:
     username: postgres
     publication: pgsense_pub
     # -- Existing Secret containing the database password.
-    # The password is mounted as a file and referenced via password_file.
+    # The chart mounts it as a file and wires the config to read from that file.
     passwordSecret:
       name: ""
       key: password

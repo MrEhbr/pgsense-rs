@@ -13,8 +13,8 @@ host          = "localhost"         # default "localhost"
 port          = 5432                # default 5432
 dbname        = "postgres"          # default "postgres"
 username      = "postgres"          # default "postgres"
-password      = "..."               # or password_file
-password_file = "/run/secrets/alerts-pw"
+password      = "..."               # inline value, or:
+# password    = { file = "/run/secrets/alerts-pw" }
 schema        = "pgsense"           # default "pgsense"
 table         = "findings"          # default "findings"
 

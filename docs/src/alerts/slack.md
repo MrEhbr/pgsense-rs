@@ -9,7 +9,8 @@ Multiple Slack channels can be configured — each is an independent
 ```toml
 [[alerts.slack]]
 name            = "security-slack"      # optional — defaults to "slack" or "slack-N"
-token           = "xoxb-your-bot-token" # required — Bot User OAuth Token
+token           = "xoxb-your-bot-token" # required — inline value, or:
+# token         = { file = "/run/secrets/slack-token" }   # read from a file
 channel         = "#pgsense-alerts"     # required — channel name or ID
 username        = "pgsense-bot"         # optional display name
 icon_emoji      = ":shield:"            # optional emoji
@@ -20,10 +21,10 @@ max_retries     = 3                     # retry attempts on 429 responses; defau
 ```
 
 > [!IMPORTANT]
-> The `token` field is a secret. Inject via env var
-> (`PGSENSE__ALERTS__SLACK__0__TOKEN=xoxb-...`) rather than committing
-> it to config. The bot needs `chat:write` (and `chat:write.public` if
-> posting to channels the bot isn't a member of).
+> The `token` field is a secret. For production deployments, prefer the
+> file-backed form (`token = { file = "..." }`) so the value never lives
+> in plaintext config or process environment. The bot needs `chat:write` (and
+> `chat:write.public` if posting to channels the bot isn't a member of).
 
 ## Batching
 

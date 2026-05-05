@@ -11,7 +11,7 @@ service:
 
 - A workload resource running `ghcr.io/mrehbr/pgsense-rs:<tag>`.
 - A `ConfigMap` holding the rendered `config.toml` and `rules.toml`.
-- `Secret` mounts for any `password_file`-referenced credentials.
+- `Secret` mounts for any file-backed credentials.
 - An optional `Service` exposing the health/metrics port.
 - Optional `ServiceMonitor` for Prometheus Operator scraping.
 
@@ -49,7 +49,7 @@ databases:
     username: "pgsense"
     publication: "pgsense_pub"
     # Reference an existing Kubernetes Secret containing the password.
-    # The chart mounts it as a file and wires `password_file` automatically.
+    # The chart mounts it as a file and wires the config to read from it.
     passwordSecret:
       name: "pgsense-db-credentials"
       key: "password"
@@ -75,9 +75,9 @@ serviceMonitor:
 > Database and Postgres-alert passwords are supplied via
 > `passwordSecret: { name, key }`, referencing an existing Kubernetes
 > `Secret`. The chart mounts the secret as a file and points the
-> generated `config.toml` at it via `password_file`. This avoids putting
-> plaintext credentials in the `ConfigMap` and avoids env-var
-> inheritance leaking secrets into child processes.
+> generated `config.toml` at it. This avoids putting plaintext
+> credentials in the `ConfigMap` and avoids env-var inheritance leaking
+> secrets into child processes.
 
 ## Observability
 

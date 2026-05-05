@@ -35,13 +35,13 @@ include_schemas = ["public"]
 host = "shared.example.com"
 dbname = "app"
 username = "pgsense"
-password_file = "/run/secrets/app-pw"
+password = { file = "/run/secrets/app-pw" }
 
 [[databases]]
 host = "shared.example.com"
 dbname = "analytics"
 username = "pgsense"
-password_file = "/run/secrets/analytics-pw"
+password = { file = "/run/secrets/analytics-pw" }
 
 # Analytics has its own filter — top-level [scan] does NOT merge in.
 [databases.scan]

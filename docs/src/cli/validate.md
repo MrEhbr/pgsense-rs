@@ -21,7 +21,7 @@ pgsense-rs validate -c <CONFIG> [-r <RULES>] [--connect]
 
 In offline mode (no `--connect`):
 
-- **config** — TOML parses, env overrides apply, `password_file` resolves,
+- **config** — TOML parses, env overrides apply, file-backed secrets resolve,
   cross-field validation passes.
 - **databases** — every `[[databases]]` entry has non-empty
   `host`/`dbname`/`username`/`publication`, port is non-zero, and no two

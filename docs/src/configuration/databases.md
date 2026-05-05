@@ -12,8 +12,8 @@ host          = "localhost"     # default "localhost"
 port          = 5432            # default 5432
 dbname        = "app"           # default "postgres"
 username      = "pgsense"       # default "postgres"
-password      = "..."           # or password_file
-password_file = "/run/secrets/db-password"   # takes precedence over password
+password      = "..."                            # inline value, or:
+# password    = { file = "/run/secrets/db-password" }   # read from a file
 publication   = "pgsense_pub"   # default "pgsense_pub"
 
 [databases.tls]
@@ -48,13 +48,13 @@ Each database is identified by `"{host}/{dbname}"`. This string is used as:
 host = "primary.example.com"
 dbname = "orders"
 username = "pgsense"
-password_file = "/run/secrets/orders-pw"
+password = { file = "/run/secrets/orders-pw" }
 
 [[databases]]
 host = "secondary.example.com"
 dbname = "users"
 username = "pgsense"
-password_file = "/run/secrets/users-pw"
+password = { file = "/run/secrets/users-pw" }
 ```
 
 Each database keeps its own replication slot, scan filter, and metrics

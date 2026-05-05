@@ -34,7 +34,7 @@ pgsense-rs scan -c config.toml -vvv
 
 ## Lifecycle
 
-1. Load config (TOML + env overrides + `password_file` resolution + validation).
+1. Load config (TOML + env overrides + file-backed secret resolution + validation).
 2. Initialize the logging subsystem.
 3. Initialize Prometheus metrics.
 4. Spawn the optional HTTP server (when `[server] enabled = true`).

@@ -14,13 +14,15 @@ timeout_ms = 5000                 # default 5000
 [alerts.webhooks.headers]
 Authorization = "Bearer token123"
 X-Source      = "pgsense-rs"
+# Or load any header value from a file:
+# Authorization = { file = "/run/secrets/webhook-auth" }
 ```
 
 > [!IMPORTANT]
 > Header values are treated as **secrets** — they are skipped in any
-> serialization round-trip. Inject them via env vars
-> (`PGSENSE__ALERTS__WEBHOOKS__0__HEADERS__AUTHORIZATION=...`) rather
-> than committing tokens to your config file.
+> serialization round-trip. For production deployments, prefer the
+> file-backed form (`Authorization = { file = "..." }`) so values never
+> live in plaintext config or process environment.
 
 ## Multiple webhooks
 

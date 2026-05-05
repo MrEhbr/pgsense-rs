@@ -23,7 +23,7 @@ data:
     {{- if $db.password }}
     password = {{ $db.password | quote }}
     {{- else if and $db.passwordSecret $db.passwordSecret.name }}
-    password_file = "/secrets/databases/{{ $db.name }}/{{ $db.passwordSecret.key }}"
+    password = { file = "/secrets/databases/{{ $db.name }}/{{ $db.passwordSecret.key }}" }
     {{- end }}
     publication = {{ default "pgsense_pub" $db.publication | quote }}
     {{- if $db.tls }}
@@ -127,9 +127,9 @@ data:
     {{- if .password }}
     password = {{ .password | quote }}
     {{- else if and .passwordSecret .passwordSecret.name }}
-    password_file = "/secrets/alerts-postgres/{{ .passwordSecret.key }}"
+    password = { file = "/secrets/alerts-postgres/{{ .passwordSecret.key }}" }
     {{- else if .passwordFile }}
-    password_file = {{ .passwordFile | quote }}
+    password = { file = {{ .passwordFile | quote }} }
     {{- end }}
     schema = {{ default "pgsense" .schema | quote }}
     table = {{ default "findings" .table | quote }}

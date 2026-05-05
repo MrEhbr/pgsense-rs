@@ -33,7 +33,7 @@ exclude_columns = ["*_hash", "*_token"]
 host          = "primary.db.svc.cluster.local"
 dbname        = "orders"
 username      = "pgsense"
-password_file = "/run/secrets/orders-pw"
+password       = { file = "/run/secrets/orders-pw" }
 publication   = "pgsense_pub"
 
 [databases.scan]
@@ -44,7 +44,7 @@ include_schemas = ["public", "billing"]
 host          = "analytics.db.svc.cluster.local"
 dbname        = "events"
 username      = "pgsense"
-password_file = "/run/secrets/events-pw"
+password       = { file = "/run/secrets/events-pw" }
 publication   = "pgsense_pub"
 
 [databases.scan]

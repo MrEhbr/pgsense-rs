@@ -27,7 +27,8 @@ host = "localhost"
 dbname = "mydb"
 username = "postgres"
 password = "postgres"
-# password_file = "/run/secrets/db-password"  # reads password from file; takes precedence over password
+# Or load the password from a file (recommended for production):
+# password = { file = "/run/secrets/db-password" }
 # publication = "pgsense_pub"    # must exist: CREATE PUBLICATION pgsense_pub FOR ALL TABLES;
 # tls.enabled = false
 # tls.trusted_root_certs = "/path/to/ca.pem"
@@ -93,11 +94,15 @@ password = "postgres"
 # timeout_ms = 5000
 # [alerts.webhooks.headers]
 # Authorization = "Bearer token123"
+# Or load any header value from a file:
+# Authorization = { file = "/run/secrets/webhook-auth" }
 
 # Slack (repeatable — add multiple [[alerts.slack]] blocks):
 # [[alerts.slack]]
 # name = "security-slack"        # optional display name (default: "slack" or "slack-N")
 # token = "xoxb-your-bot-token"  # required — Bot User OAuth Token
+# Or load the token from a file (recommended for production):
+# token = { file = "/run/secrets/slack-token" }
 # channel = "#pgsense-alerts"    # required — channel name or ID
 # username = "pgsense-bot"       # optional display name
 # icon_emoji = ":shield:"        # optional emoji icon
@@ -114,6 +119,7 @@ password = "postgres"
 # dbname = "postgres"
 # username = "postgres"
 # password = "postgres"
+# password = { file = "/run/secrets/alerts-pg-password" }   # alternatively, load from file
 # schema = "pgsense"
 # table = "findings"
 # tls.enabled = false
