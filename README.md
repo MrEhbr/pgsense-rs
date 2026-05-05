@@ -1,6 +1,7 @@
 # pgsense-rs
 
 [![CI](https://github.com/MrEhbr/pgsense-rs/actions/workflows/checks.yml/badge.svg)](https://github.com/MrEhbr/pgsense-rs/actions)
+[![Docs](https://img.shields.io/badge/docs-mdBook-blue)](https://mrehbr.github.io/pgsense-rs/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-2024+-orange)](https://www.rust-lang.org)
 
@@ -67,6 +68,14 @@ Highlights:
 - **[Operations](https://mrehbr.github.io/pgsense-rs/ops/metrics.html)** — metrics, health, Helm, multi-database
 
 Build the docs locally with `just docs-serve`.
+
+## Installation
+
+Pre-built binaries (Linux x86_64 / arm64) and multi-arch Docker images are published on every release tag:
+
+- **Binaries** — see the [Releases page](https://github.com/MrEhbr/pgsense-rs/releases)
+- **Docker** — `ghcr.io/mrehbr/pgsense-rs:latest`
+- **From source** — `cargo install --git https://github.com/MrEhbr/pgsense-rs --locked`
 
 ## Development
 
