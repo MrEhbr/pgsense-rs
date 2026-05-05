@@ -96,6 +96,7 @@ fuzz/output/
 .copilot/
 .claude/
 .serena/
+CLAUDE.md
 
 # Runtime data
 data/
