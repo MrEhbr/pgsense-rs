@@ -110,7 +110,7 @@ jobs:
         run: |
           shopt -s nullglob
           git add Cargo.toml Cargo.lock CHANGELOG.md crates/*/Cargo.toml crates/*/CHANGELOG.md charts/pgsense/Chart.yaml
-          git commit -m "chore(release): bump version to ${{ steps.version.outputs.version }}"
+          git commit -m "chore(release): bump version to ${{ steps.version.outputs.version }} [skip ci]"
           echo "Committed version and changelog changes"
 
       - name: Create and push tag
