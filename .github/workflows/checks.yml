@@ -6,12 +6,28 @@ on:
       - '**.md'
       - 'LICENSE'
       - '.gitignore'
+      - 'docs/**'
+      - 'charts/**'
+      - 'cliff.toml'
+      - 'dist/**'
+      - '.github/workflows/docs.yml'
+      - '.github/workflows/audit.yml'
+      - '.github/workflows/prepare-release.yml'
+      - '.github/workflows/publish-release.yml'
   push:
     branches: [main]
     paths-ignore:
       - '**.md'
       - 'LICENSE'
       - '.gitignore'
+      - 'docs/**'
+      - 'charts/**'
+      - 'cliff.toml'
+      - 'dist/**'
+      - '.github/workflows/docs.yml'
+      - '.github/workflows/audit.yml'
+      - '.github/workflows/prepare-release.yml'
+      - '.github/workflows/publish-release.yml'
   workflow_dispatch:
 
 permissions:
