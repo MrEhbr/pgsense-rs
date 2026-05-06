@@ -3,6 +3,25 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 ---
+## [0.6.1](https://github.com/MrEhbr/pgsense-rs/compare/v0.6.0..v0.6.1) - 2026-05-06
+
+### CI/CD
+
+- skip checks on docs, charts, and sibling workflows - ([2c851f9](https://github.com/MrEhbr/pgsense-rs/commit/2c851f983eb670877c7d1ed039e85018e653673e)) `+16 / -0 across 1 file(s)` - Aleksei Burmistrov
+- skip checks on release-bump commit, trigger publish on tag create - ([7ef7aa6](https://github.com/MrEhbr/pgsense-rs/commit/7ef7aa60358175858263c2cfe6f90aff66501a23)) `+5 / -4 across 2 file(s)` - Aleksei Burmistrov
+
+### Documentation
+
+- document etl schema bootstrap permissions - ([c674234](https://github.com/MrEhbr/pgsense-rs/commit/c67423404585632e74fb9fa69ef17699a6dbf43d)) `+161 / -11 across 2 file(s)` - Aleksei Burmistrov
+
+### Statistics
+
+- 3 commit(s) contributed to the release.
+- 0 day(s) between first and last commit.
+- 3 commit(s) parsed as conventional.
+- Diff totals: +182 / -15 across 5 file change(s) (sum across commits, may double-count files touched in multiple commits).
+- 1 day(s) since the previous release.
+
 ## [0.6.0](https://github.com/MrEhbr/pgsense-rs/compare/v0.5.0..v0.6.0) - 2026-05-05
 
 ### Bug Fixes
