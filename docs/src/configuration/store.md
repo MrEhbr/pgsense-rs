@@ -33,6 +33,12 @@ This means:
 - State and source data are backed up together, so they stay consistent.
 - The replication user must be able to `CREATE SCHEMA` (or the `etl`
   schema must already exist with appropriate ownership).
+- First-time migration application requires **superuser** because one
+  of the upstream migrations creates an event trigger
+  (`supabase_etl_ddl_message_trigger`). After migrations apply, the
+  role can be downgraded. See [PostgreSQL Setup → `etl` schema
+  bootstrap](../getting-started/postgres-setup.md#etl-schema-bootstrap)
+  for the full permission matrix.
 
 > [!NOTE]
 > There is no separate state-database option — state always lives in the
