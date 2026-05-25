@@ -78,15 +78,15 @@ pub fn luhn(s: &str) -> bool {
 /// Validate a phone number via parse + validity check.
 /// Handles E.164 (`+` prefix), `00` dial prefix, and bare NANP numbers.
 pub fn phone(s: &str) -> bool {
-    use rlibphonenumber::PHONE_NUMBER_UTIL;
+    use rlibphonenumber::{PHONE_NUMBER_UTIL, Region};
 
     if s.starts_with('+') {
-        PHONE_NUMBER_UTIL.parse(s)
+        PHONE_NUMBER_UTIL.parse(s, None)
     } else if let Some(rest) = s.strip_prefix("00") {
-        PHONE_NUMBER_UTIL.parse(format!("+{rest}"))
+        PHONE_NUMBER_UTIL.parse(format!("+{rest}"), None)
     } else {
         // Bare NANP — US covers all NANP regions (US, CA, Caribbean share CC 1)
-        PHONE_NUMBER_UTIL.parse_with_default_region(s, "US")
+        PHONE_NUMBER_UTIL.parse(s, Some(Region::US))
     }
     .is_ok_and(|n| n.is_valid())
 }
