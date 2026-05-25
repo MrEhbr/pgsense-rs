@@ -67,6 +67,7 @@
             postgresql_18
             curl
             prek
+            protobuf
           ];
 
           env = {
