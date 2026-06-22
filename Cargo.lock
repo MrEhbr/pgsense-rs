@@ -638,9 +638,9 @@ dependencies = [
 
 [[package]]
 name = "config"
-version = "0.15.23"
+version = "0.15.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f316c6237b2d38be61949ecd15268a4c6ca32570079394a2444d9ce2c72a72d8"
+checksum = "0b34d0237145f33580b89724f75d16950efd3e2c91b2d823917ecb69ec7f84f0"
 dependencies = [
  "pathdiff",
  "serde_core",
@@ -2806,7 +2806,7 @@ dependencies = [
  "chrono",
  "clap",
  "clap-verbosity-flag",
- "config 0.15.23",
+ "config 0.15.24",
  "console-subscriber",
  "criterion",
  "etl",
@@ -3618,9 +3618,9 @@ dependencies = [
 
 [[package]]
 name = "rlibphonenumber"
-version = "2.2.4"
+version = "2.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb44b4a55252a9aefa4923bd3472aa24211b63f7bab37b86b1b4e6bcfab94301"
+checksum = "a7b830f425dcddb8a1bd2e02a0e1db439a0129cf564b17ffd8672c586e44caca"
 dependencies = [
  "dashmap",
  "fast-cat",
