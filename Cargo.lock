@@ -113,15 +113,15 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.102"
+version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
+checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
 name = "arc-swap"
-version = "1.9.1"
+version = "1.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a3a1fd6f75306b68087b831f025c712524bcb19aad54e557b1129cfa0a2b207"
+checksum = "c049c0be4daef0b145cb3555416b3b8ef5b7888a38aea1a3a155801fe7b0810b"
 dependencies = [
  "rustversion",
 ]
@@ -638,9 +638,9 @@ dependencies = [
 
 [[package]]
 name = "config"
-version = "0.15.23"
+version = "0.15.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f316c6237b2d38be61949ecd15268a4c6ca32570079394a2444d9ce2c72a72d8"
+checksum = "b85f248a4de22d204ceabc6299d89d2c70fbd7f09fea53c06c852369652d8139"
 dependencies = [
  "pathdiff",
  "serde_core",
@@ -2806,7 +2806,7 @@ dependencies = [
  "chrono",
  "clap",
  "clap-verbosity-flag",
- "config 0.15.23",
+ "config 0.15.25",
  "console-subscriber",
  "criterion",
  "etl",
@@ -3618,9 +3618,9 @@ dependencies = [
 
 [[package]]
 name = "rlibphonenumber"
-version = "2.2.4"
+version = "2.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb44b4a55252a9aefa4923bd3472aa24211b63f7bab37b86b1b4e6bcfab94301"
+checksum = "a7b830f425dcddb8a1bd2e02a0e1db439a0129cf564b17ffd8672c586e44caca"
 dependencies = [
  "dashmap",
  "fast-cat",
