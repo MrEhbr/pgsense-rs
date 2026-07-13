@@ -1,7 +1,7 @@
 # Dockerfile for GoReleaser builds
 # Uses distroless for minimal, secure images with glibc support
 
-FROM gcr.io/distroless/cc-debian12:latest@sha256:d703b626ba455c4e6c6fbe5f36e6f427c85d51445598d564652a2f334179f96e
+FROM gcr.io/distroless/cc-debian12:latest@sha256:a90cf0f046efb32466b38b0972fef3a95e7c580e392e79ff1b7ac08c15fed0bc
 
 # Copy the pre-built binary from goreleaser's build context
 # GoReleaser organizes binaries by TARGETPLATFORM (e.g., linux/amd64, linux/arm64)
