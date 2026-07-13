@@ -1227,7 +1227,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee93edf3c501f0035bbeffeccfed0b79e14c311f12195ec0e661e114a0f60da4"
 dependencies = [
  "portable-atomic",
- "rand 0.10.1",
+ "rand 0.10.2",
  "web-time",
 ]
 
@@ -2818,7 +2818,7 @@ dependencies = [
  "opentelemetry_sdk",
  "predicates",
  "prometheus",
- "rand 0.10.1",
+ "rand 0.10.2",
  "regex",
  "reqwest",
  "rhai",
@@ -3024,7 +3024,7 @@ dependencies = [
  "hmac 0.13.0",
  "md-5 0.11.0",
  "memchr",
- "rand 0.10.1",
+ "rand 0.10.2",
  "sha2 0.11.0",
  "stringprep",
 ]
@@ -3379,9 +3379,9 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.10.1"
+version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2e8e8bcc7961af1fdac401278c6a831614941f6164ee3bf4ce61b7edb162207"
+checksum = "c7f5fa3a058cd35567ef9bfa5e75732bee0f9e4c55fa90477bef2dfcdbc4be80"
 dependencies = [
  "chacha20",
  "getrandom 0.4.2",
@@ -3501,9 +3501,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.12.4"
+version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1292b7759ae1cb9ec195452d1390a074f0cd8541ab7a5a8c31cd6db45d4a6ba"
+checksum = "2a0e75113e14dc5acb068cd0786884f214f1312650a3d36d269f5c4f3cdee8a2"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -3618,9 +3618,9 @@ dependencies = [
 
 [[package]]
 name = "rlibphonenumber"
-version = "2.2.5"
+version = "2.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7b830f425dcddb8a1bd2e02a0e1db439a0129cf564b17ffd8672c586e44caca"
+checksum = "5e12b574e798b7d176d7bbf5a77bd462a65cbf9129fa2b801e88c4931235b560"
 dependencies = [
  "dashmap",
  "fast-cat",
@@ -4784,7 +4784,7 @@ dependencies = [
  "pin-project-lite",
  "postgres-protocol 0.6.12",
  "postgres-types 0.2.14",
- "rand 0.10.1",
+ "rand 0.10.2",
  "socket2 0.6.3",
  "tokio",
  "tokio-util",
