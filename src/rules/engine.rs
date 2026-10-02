@@ -384,7 +384,8 @@ mod tests {
         assert!(msg.contains("include_columns"), "error should name the field: {msg}");
     }
 
-    // Interleaving builtins must not corrupt the RegexSet→rules[] index mapping.
+    // Interleaving builtins must not corrupt the RegexSet→rules[] index
+    // mapping.
     #[test]
     fn regex_indices_skip_non_regex_rules() {
         let configs = vec![

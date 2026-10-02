@@ -71,7 +71,8 @@ async fn unit_transitions_to_exited_after_shutdown() {
     assert_eq!(db_id, expected_id);
     assert!(result.is_ok());
 
-    // Status may take a moment to update after the spawned task processes shutdown
+    // Status may take a moment to update after the spawned task processes
+    // shutdown
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert_eq!(unit.status(), PipelineStatus::Exited);
 }

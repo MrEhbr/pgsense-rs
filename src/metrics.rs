@@ -119,8 +119,8 @@ pub static PHASE_SCAN_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
 });
 
 pub fn init(profiling: bool) {
-    // Force initialization of all metrics so they appear in /metrics before first
-    // use
+    // Force initialization of all metrics so they appear in /metrics before
+    // first use
     let _ = &*EVENTS_TOTAL;
     let _ = &*FINDINGS_TOTAL;
     let _ = &*ALERTS_TOTAL;

@@ -81,7 +81,8 @@ pub async fn run(args: Args) -> Result<()> {
     );
     supervisor.start().await?;
 
-    // Watch rules file for hot reload — _watcher must stay alive for scan duration
+    // Watch rules file for hot reload — _watcher must stay alive for scan
+    // duration
     let (mut rules_rx, _watcher) = crate::watcher::watch_file(rules_path).context("failed to set up rules file watcher")?;
     let rules_path = rules_path.to_path_buf();
 

@@ -144,8 +144,8 @@ pub fn email(s: &str) -> bool {
     if last_label.len() < 2 {
         return false;
     }
-    // Intentionally rejects punycode/IDN TLDs (e.g. xn--p1ai) — targets common PII
-    // patterns
+    // Intentionally rejects punycode/IDN TLDs (e.g. xn--p1ai) — targets common
+    // PII patterns
     last_label
         .as_bytes()
         .iter()
