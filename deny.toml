@@ -6,7 +6,9 @@ version = 2
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "warn"
-ignore = []
+ignore = [
+    { id = "RUSTSEC-2026-0249", reason = "smartstring is a required dependency of rhai; no maintained alternative available upstream" },
+]
 
 [licenses]
 version = 2
